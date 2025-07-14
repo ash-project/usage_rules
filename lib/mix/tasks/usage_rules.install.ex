@@ -44,22 +44,16 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      file =
-        Enum.find(
-          ["AGENTS.md", "CLAUDE.md", "RULES.md", "rules.md", "cursorrules", "rules"],
-          "AGENTS.md",
-          &Igniter.exists?(igniter, &1)
-        )
-
       igniter
-      |> Igniter.compose_task("usage_rules.sync", [
-        file,
-        "--all",
-        "--link-to-folder",
-        "deps",
-        "--inline",
-        "usage_rules:all"
-      ])
+      |> Igniter.add_notice("""
+        `usage_rules` is installed!
+
+        Example sync commands:
+        - `mix usage_rules.sync AGENTS.md --all --link-to-folder rules --inline usage_rules:all`
+        - `mix usage_rules.sync RULES.md --all`
+
+        For more info and examples: `mix help usage_rules.sync`
+        """)
     end
   end
 else
