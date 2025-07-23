@@ -14,7 +14,8 @@ mix igniter.install usage_rules
 
 # swap AGENTS.md out for any file you like, e.g `CLAUDE.md`
 # sync projects as links to their usage rules
-# to save tokens. Agent can view them on demand
+# to save tokens. Agent can view them on demand.
+# Existing rules in the file are retained.
 mix usage_rules.sync AGENTS.md --all \
   --inline usage_rules:all \
   --link-to-folder deps
