@@ -62,7 +62,7 @@ if Code.ensure_loaded?(Igniter) do
             --link-to-folder rules
 
 
-      For more ineo and examples: `mix help usage_rules.sync`
+      For more info and examples: `mix help usage_rules.sync`
       """)
     end
   end
