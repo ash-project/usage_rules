@@ -217,3 +217,20 @@ def deps do
   ]
 end
 ```
+
+### Alias example
+
+```elixir
+  defp aliases do
+    [
+      "usage_rules.update": [
+        """
+        usage_rules.sync AGENTS.md --all \
+          --inline usage_rules:all \
+          --link-to-folder deps
+        """
+        |> String.trim()
+      ]
+    ]
+  end
+```
