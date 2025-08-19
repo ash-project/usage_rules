@@ -8,10 +8,22 @@
 
 ## Quickstart
 
-```sh
-# install usage_rules into your project
-mix igniter.install usage_rules
+Begin by installing `usage_rules` in your project.
+If you have [igniter](https://github.com/ash-project/igniter) installed, run:
 
+```sh
+mix igniter.install usage_rules
+```
+
+Otherwise, add `usage_rules` to your dependencies in `mix.exs` and run `mix deps.get`:
+
+```elixir
+{:usage_rules, "~> 0.1"}
+```
+
+Then, use the `usage_rules.sync` mix task to gather rules from your dependencies:
+
+```sh
 # swap AGENTS.md out for any file you like, e.g `CLAUDE.md`
 # sync projects as links to their usage rules
 # to save tokens. Agent can view them on demand.
