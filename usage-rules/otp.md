@@ -9,7 +9,7 @@
 ## Process Communication
 - Use `GenServer.call/3` for synchronous requests expecting replies
 - Use `GenServer.cast/2` for fire-and-forget messages.
-- When in doubt, us `call` over `cast`, to ensure back-pressure
+- When in doubt, use `call` over `cast`, to ensure back-pressure
 - Set appropriate timeouts for `call/3` operations
 
 ## Fault Tolerance
