@@ -3,6 +3,7 @@
 ## Pattern Matching
 - Use pattern matching over conditional logic when possible
 - Prefer to match on function heads instead of using `if`/`else` or `case` in function bodies
+- **CRITICAL**: `%{}` matches ANY map, not just empty maps. Use `map_size(map) == 0` guard to check for truly empty maps
 
 ## Error Handling
 - Use `{:ok, result}` and `{:error, reason}` tuples for operations that can fail
