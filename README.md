@@ -86,6 +86,8 @@ mix usage_rules.sync AGENTS.md package package:html package:database
 
 This is particularly useful for projects using frameworks like Ash, Phoenix, or other packages that provide specific usage guidelines, coding patterns, or best practices that should be followed consistently across your project.
 
+> **Note:** UsageRules can only discover `usage-rules.md` files from dependency versions that actually include them. If a package has added usage rules in a newer version than what your project uses, you'll need to update that dependency to access its rules.
+
 ## Usage
 
 The main task `mix usage_rules.sync` provides several modes of operation:
