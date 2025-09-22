@@ -36,6 +36,8 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
     * `--link-to-folder <folder>` - Save usage rules for each package in separate files within the specified folder and create links to them
     * `--link-style <style>` - Style of links to create when using --link-to-folder (markdown|at). Defaults to 'markdown'
     * `--inline <specs>` - Force specific packages to be inlined even when using --link-to-folder. Supports same specs as packages (comma-separated)
+    * `--folder-only <folder>` - Extract usage rules to the specified folder without updating any other files
+    * `--folder-only-merge <folder>` - Like --folder-only but merge sub-rules into the same file per package
 
     ## Examples
 
@@ -124,6 +126,26 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
     mix usage_rules.sync CLAUDE.md ash phoenix --remove-missing
     ```
 
+    Extract usage rules to folder without updating any files:
+    ```sh
+    mix usage_rules.sync ash phoenix --folder-only rules
+    ```
+
+    Extract all usage rules to folder:
+    ```sh
+    mix usage_rules.sync --all --folder-only docs
+    ```
+
+    Extract and merge sub-rules into single files per package:
+    ```sh
+    mix usage_rules.sync ash:testing ash:queries --folder-only-merge rules
+    ```
+
+    Extract all usage rules with merging:
+    ```sh
+    mix usage_rules.sync --all --folder-only-merge docs
+    ```
+
     """
   end
 end
@@ -154,7 +176,9 @@ if Code.ensure_loaded?(Igniter) do
           remove_missing: :boolean,
           link_to_folder: :string,
           link_style: :string,
-          inline: :string
+          inline: :string,
+          folder_only: :string,
+          folder_only_merge: :string
         ]
       }
     end
@@ -199,7 +223,18 @@ if Code.ensure_loaded?(Igniter) do
       link_to_folder = igniter.args.options[:link_to_folder]
       link_style = igniter.args.options[:link_style] || "markdown"
       inline_specs = parse_inline_specs(igniter.args.options[:inline])
-      provided_packages = igniter.args.positional.packages
+      folder_only = igniter.args.options[:folder_only]
+      folder_only_merge = igniter.args.options[:folder_only_merge]
+      # Fix argument parsing for folder-only and folder-only-merge: when no file should be specified,
+      # the first argument gets incorrectly parsed as 'file' instead of the first package
+      provided_packages =
+        if (folder_only || folder_only_merge) && igniter.args.positional[:file] && !File.exists?(igniter.args.positional[:file]) do
+          # The 'file' is actually the first package
+          [igniter.args.positional[:file]] ++ (igniter.args.positional.packages || [])
+        else
+          igniter.args.positional.packages || []
+        end
+
 
       cond do
         # If --link-style is used with invalid value, add error
@@ -209,6 +244,26 @@ if Code.ensure_loaded?(Igniter) do
         # If --link-style is used without --link-to-folder, add error
         igniter.args.options[:link_style] && !link_to_folder ->
           Igniter.add_issue(igniter, "--link-style can only be used with --link-to-folder")
+
+        # If both --folder-only and --folder-only-merge are used, add error
+        folder_only && folder_only_merge ->
+          Igniter.add_issue(igniter, "--folder-only and --folder-only-merge cannot be used together")
+
+        # If --folder-only is used with incompatible options, add error
+        folder_only && (list_option || remove_option || remove_missing_option || link_to_folder) ->
+          Igniter.add_issue(igniter, "--folder-only cannot be used with --list, --remove, --remove-missing, or --link-to-folder options")
+
+        # If --folder-only-merge is used with incompatible options, add error
+        folder_only_merge && (list_option || remove_option || remove_missing_option || link_to_folder) ->
+          Igniter.add_issue(igniter, "--folder-only-merge cannot be used with --list, --remove, --remove-missing, or --link-to-folder options")
+
+        # If --folder-only is used without packages and not with --all, add error
+        folder_only && Enum.empty?(provided_packages) && !all_option ->
+          Igniter.add_issue(igniter, "--folder-only requires either --all or specific packages to be provided")
+
+        # If --folder-only-merge is used without packages and not with --all, add error
+        folder_only_merge && Enum.empty?(provided_packages) && !all_option ->
+          Igniter.add_issue(igniter, "--folder-only-merge requires either --all or specific packages to be provided")
 
         # If --remove is used with --all or --list, add error
         remove_option && (all_option || list_option) ->
@@ -230,22 +285,34 @@ if Code.ensure_loaded?(Igniter) do
         remove_option && Enum.empty?(provided_packages) ->
           Igniter.add_issue(igniter, "--remove option requires packages to remove")
 
-        # If --list or --all is given and packages list is not empty, add error
-        (all_option || list_option) && !Enum.empty?(provided_packages) ->
-          Igniter.add_issue(igniter, "Cannot specify packages when using --all or --list options")
+        # If --list is given and packages list is not empty, add error
+        list_option && !Enum.empty?(provided_packages) ->
+          Igniter.add_issue(igniter, "Cannot specify packages when using --list option")
 
-        # If --all is used without a file, add error
-        all_option && is_nil(igniter.args.positional[:file]) ->
+        # If --all is given and packages list is not empty (except with --folder-only or --folder-only-merge), add error
+        all_option && !Enum.empty?(provided_packages) && !folder_only && !folder_only_merge ->
+          Igniter.add_issue(igniter, "Cannot specify packages when using --all option")
+
+        # If --all is used without a file (and not with --folder-only or --folder-only-merge), add error
+        all_option && is_nil(igniter.args.positional[:file]) && !folder_only && !folder_only_merge ->
           Igniter.add_issue(igniter, "--all option requires a file to write to")
 
         # If --link-to-folder is used without a file, add error
         link_to_folder && is_nil(igniter.args.positional[:file]) ->
           Igniter.add_issue(igniter, "--link-to-folder option requires a file to write to")
 
-        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing is set, add error
+        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing nor --folder-only nor --folder-only-merge is set, add error
         Enum.empty?(provided_packages) && !all_option && !list_option && !remove_option &&
-            !remove_missing_option ->
+            !remove_missing_option && !folder_only && !folder_only_merge ->
           add_usage_error(igniter)
+
+        # Handle --folder-only option
+        folder_only ->
+          handle_folder_only_option(igniter, all_deps, provided_packages, folder_only, all_option)
+
+        # Handle --folder-only-merge option
+        folder_only_merge ->
+          handle_folder_only_merge_option(igniter, all_deps, provided_packages, folder_only_merge, all_option)
 
         # Handle --remove option
         remove_option ->
@@ -490,6 +557,18 @@ if Code.ensure_loaded?(Igniter) do
 
         mix usage_rules.sync <file> <packages...> --remove --link-to-folder <folder>
           Remove specific packages from the target file and delete their folder files
+
+        mix usage_rules.sync <packages...> --folder-only <folder>
+          Extract usage rules for specific packages to the specified folder without updating any other files
+
+        mix usage_rules.sync --all --folder-only <folder>
+          Extract usage rules for all dependencies to the specified folder without updating any other files
+
+        mix usage_rules.sync <packages...> --folder-only-merge <folder>
+          Extract usage rules for specific packages to the specified folder, merging sub-rules into single files
+
+        mix usage_rules.sync --all --folder-only-merge <folder>
+          Extract usage rules for all dependencies to the specified folder, merging sub-rules into single files
       """)
     end
 
@@ -637,6 +716,251 @@ if Code.ensure_loaded?(Igniter) do
       else
         Igniter.add_issue(igniter, "File #{file_path} does not exist")
       end
+    end
+
+    defp handle_folder_only_merge_option(igniter, all_deps, provided_packages, folder_name, all_option) do
+      packages_to_process =
+        if all_option do
+          all_packages_with_rules = get_packages_with_usage_rules(igniter, all_deps)
+
+          all_packages_with_rules
+          |> Enum.flat_map(fn {package_name, package_path} ->
+            main_rules =
+              if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+                [{package_name, package_path, nil}]
+              else
+                []
+              end
+
+            sub_rules =
+              find_available_sub_rules(igniter, package_path)
+              |> Enum.map(fn sub_rule_name ->
+                {package_name, package_path, sub_rule_name}
+              end)
+
+            main_rules ++ sub_rules
+          end)
+        else
+          expanded_packages = expand_wildcard_specs(igniter, all_deps, provided_packages)
+
+          expanded_packages
+          |> Enum.flat_map(fn package_spec ->
+            {package_name, sub_rule} = parse_package_spec(package_spec)
+
+            case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
+              {_name, package_path} ->
+                case sub_rule do
+                  nil ->
+                    usage_rules_path = Path.join(package_path, "usage-rules.md")
+
+                    if Igniter.exists?(igniter, usage_rules_path) do
+                      [{package_name, package_path, nil}]
+                    else
+                      []
+                    end
+
+                  sub_rule_name ->
+                    sub_rule_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
+
+                    if Igniter.exists?(igniter, sub_rule_path) do
+                      [{package_name, package_path, sub_rule_name}]
+                    else
+                      []
+                    end
+                end
+
+              nil ->
+                []
+            end
+          end)
+        end
+
+      packages_to_process
+      |> Enum.group_by(fn {name, _path, _sub_rule} -> name end)
+      |> Enum.reduce(igniter, fn {package_name, rules}, acc ->
+        target_file_name = "#{package_name}.md"
+        package_file_path = Path.join(folder_name, target_file_name)
+
+        package_contents =
+          rules
+          |> Enum.map(fn {_name, path, sub_rule} ->
+            usage_rules_path =
+              case sub_rule do
+                nil ->
+                  Path.join(path, "usage-rules.md")
+
+                sub_rule_name ->
+                  Path.join([path, "usage-rules", "#{sub_rule_name}.md"])
+              end
+
+            content =
+              case Rewrite.source(acc.rewrite, usage_rules_path) do
+                {:ok, source} -> Rewrite.Source.get(source, :content)
+                {:error, _} -> File.read!(usage_rules_path)
+              end
+
+            section_name =
+              case sub_rule do
+                nil -> to_string(package_name)
+                sub_rule_name -> "#{package_name}:#{sub_rule_name}"
+              end
+
+            description =
+              case sub_rule do
+                nil -> get_package_description(package_name)
+                _ -> ""
+              end
+
+            description_part = if description == "", do: "", else: "_#{description}_\n\n"
+
+            {section_name,
+             "<!-- #{section_name}-start -->\n" <>
+               "## #{section_name} usage\n" <>
+               description_part <>
+               content <>
+               "\n<!-- #{section_name}-end -->"}
+          end)
+
+        all_rules_content = Enum.map_join(package_contents, "\n", &elem(&1, 1))
+
+        full_contents_for_new_file = all_rules_content
+
+        section_names =
+          rules
+          |> Enum.map(fn {_name, _path, sub_rule} ->
+            case sub_rule do
+              nil -> to_string(package_name)
+              sub_rule_name -> "#{package_name}:#{sub_rule_name}"
+            end
+          end)
+          |> Enum.join(", ")
+
+        acc
+        |> Igniter.add_notice("Extracting and merging usage rules for: #{section_names} -> #{package_file_path}")
+        |> Igniter.create_or_update_file(
+          package_file_path,
+          full_contents_for_new_file,
+          fn source ->
+            current_contents = Rewrite.Source.get(source, :content)
+
+            new_content =
+              if current_contents == "" do
+                # New file, just concatenate all package contents
+                Enum.map_join(package_contents, "\n", &elem(&1, 1))
+              else
+                # Existing file, update each section
+                Enum.reduce(package_contents, current_contents, fn {name, package_content}, acc_content ->
+                  case String.split(acc_content, [
+                         "<!-- #{name}-start -->\n",
+                         "\n<!-- #{name}-end -->"
+                       ]) do
+                    [prelude, _, postlude] ->
+                      prelude <> package_content <> postlude
+
+                    _ ->
+                      acc_content <> "\n" <> package_content
+                  end
+                end)
+              end
+
+            Rewrite.Source.update(source, :content, new_content)
+          end
+        )
+      end)
+    end
+
+    defp handle_folder_only_option(igniter, all_deps, provided_packages, folder_name, all_option) do
+      packages_to_process =
+        if all_option do
+          all_packages_with_rules = get_packages_with_usage_rules(igniter, all_deps)
+
+          all_packages_with_rules
+          |> Enum.flat_map(fn {package_name, package_path} ->
+            main_rules =
+              if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+                [{package_name, package_path, nil}]
+              else
+                []
+              end
+
+            sub_rules =
+              find_available_sub_rules(igniter, package_path)
+              |> Enum.map(fn sub_rule_name ->
+                {package_name, package_path, sub_rule_name}
+              end)
+
+            main_rules ++ sub_rules
+          end)
+        else
+          expanded_packages = expand_wildcard_specs(igniter, all_deps, provided_packages)
+
+          expanded_packages
+          |> Enum.flat_map(fn package_spec ->
+            {package_name, sub_rule} = parse_package_spec(package_spec)
+
+            case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
+              {_name, package_path} ->
+                case sub_rule do
+                  nil ->
+                    usage_rules_path = Path.join(package_path, "usage-rules.md")
+
+                    if Igniter.exists?(igniter, usage_rules_path) do
+                      [{package_name, package_path, nil}]
+                    else
+                      []
+                    end
+
+                  sub_rule_name ->
+                    sub_rule_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
+
+                    if Igniter.exists?(igniter, sub_rule_path) do
+                      [{package_name, package_path, sub_rule_name}]
+                    else
+                      []
+                    end
+                end
+
+              nil ->
+                []
+            end
+          end)
+        end
+
+      Enum.reduce(packages_to_process, igniter, fn {name, path, sub_rule}, acc ->
+        {usage_rules_path, target_file_name} =
+          case sub_rule do
+            nil ->
+              {Path.join(path, "usage-rules.md"), "#{name}.md"}
+
+            sub_rule_name ->
+              {Path.join([path, "usage-rules", "#{sub_rule_name}.md"]),
+               "#{name}_#{sub_rule_name}.md"}
+          end
+
+        content =
+          case Rewrite.source(acc.rewrite, usage_rules_path) do
+            {:ok, source} -> Rewrite.Source.get(source, :content)
+            {:error, _} -> File.read!(usage_rules_path)
+          end
+
+        package_file_path = Path.join(folder_name, target_file_name)
+
+        section_name =
+          case sub_rule do
+            nil -> to_string(name)
+            sub_rule_name -> "#{name}:#{sub_rule_name}"
+          end
+
+        acc
+        |> Igniter.add_notice("Extracting usage rules for: #{section_name} -> #{package_file_path}")
+        |> Igniter.create_or_update_file(
+          package_file_path,
+          content,
+          fn source ->
+            Rewrite.Source.update(source, :content, content)
+          end
+        )
+      end)
     end
 
     defp get_packages_with_usage_rules(igniter, all_deps) do
