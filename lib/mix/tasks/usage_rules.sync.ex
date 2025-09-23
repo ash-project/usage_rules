@@ -8,7 +8,7 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
 
   @spec example() :: String.t()
   def example do
-    "mix usage_rules.sync CLAUDE.md --all --link-to-folder deps"
+    "mix usage_rules.sync AGENTS.md --all --link-to-folder deps"
   end
 
   @spec long_doc() :: String.t()
@@ -46,7 +46,7 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
 
     Gather all dependencies with usage rules:
     ```sh
-    mix usage_rules.sync CLAUDE.md --all
+    mix usage_rules.sync AGENTS.md --all
     ```
 
     List all dependencies with usage rules:
@@ -56,57 +56,57 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
 
     Check status of dependencies against a specific file:
     ```sh
-    mix usage_rules.sync CLAUDE.md --list
+    mix usage_rules.sync AGENTS.md --list
     ```
 
     Remove specific packages from a file:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --remove
+    mix usage_rules.sync AGENTS.md ash phoenix --remove
     ```
 
     Save usage rules to individual files in a folder with markdown links:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --link-to-folder rules
+    mix usage_rules.sync AGENTS.md ash phoenix --link-to-folder rules
     ```
 
     Save usage rules with @-style links:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --link-to-folder rules --link-style at
+    mix usage_rules.sync AGENTS.md ash phoenix --link-to-folder rules --link-style at
     ```
 
     Link directly to deps files without copying:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --link-to-folder deps
+    mix usage_rules.sync AGENTS.md ash phoenix --link-to-folder deps
     ```
 
     Combine all dependencies with folder links:
     ```sh
-    mix usage_rules.sync CLAUDE.md --all --link-to-folder docs
+    mix usage_rules.sync AGENTS.md --all --link-to-folder docs
     ```
 
     Check status of packages using folder links:
     ```sh
-    mix usage_rules.sync CLAUDE.md --list --link-to-folder rules
+    mix usage_rules.sync AGENTS.md --list --link-to-folder rules
     ```
 
     Remove packages and their folder files:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --remove --link-to-folder rules
+    mix usage_rules.sync AGENTS.md ash phoenix --remove --link-to-folder rules
     ```
 
     Include specific sub-rules:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash:testing phoenix:views
+    mix usage_rules.sync AGENTS.md ash:testing phoenix:views
     ```
 
     Include all sub-rules from a package:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash:all
+    mix usage_rules.sync AGENTS.md ash:all
     ```
 
     Mix main package rules with sub-rules:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash ash:testing phoenix:views
+    mix usage_rules.sync AGENTS.md ash ash:testing phoenix:views
     ```
 
     Inline all sub-rules while linking main packages (recommended for agents):
@@ -116,12 +116,12 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
 
     Inline specific packages while linking others:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash:testing phoenix --inline ash:testing --link-to-folder docs
+    mix usage_rules.sync AGENTS.md ash:testing phoenix --inline ash:testing --link-to-folder docs
     ```
 
     Remove unused packages that are no longer dependencies:
     ```sh
-    mix usage_rules.sync CLAUDE.md ash phoenix --remove-missing
+    mix usage_rules.sync AGENTS.md ash phoenix --remove-missing
     ```
 
     """
@@ -467,7 +467,7 @@ if Code.ensure_loaded?(Igniter) do
     defp add_usage_error(igniter) do
       Igniter.add_issue(igniter, """
       Usage:
-        mix usage_rules.sync CLAUDE.md --all --link-to-folder deps
+        mix usage_rules.sync AGENTS.md --all --link-to-folder deps
           Standard usage: gather all dependencies and link directly to deps files
 
         mix usage_rules.sync <file> <packages...>
