@@ -65,6 +65,9 @@ if Code.ensure_loaded?(Igniter) do
       For more info and examples: `mix help usage_rules.sync`
       """)
     end
+
+    @impl Igniter.Mix.Task
+    def supports_umbrella?, do: true
   end
 else
   defmodule Mix.Tasks.UsageRules.Install do

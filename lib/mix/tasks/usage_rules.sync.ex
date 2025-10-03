@@ -354,6 +354,9 @@ if Code.ensure_loaded?(Igniter) do
       |> notice_about_all_option(all_option)
     end
 
+    @impl Igniter.Mix.Task
+    def supports_umbrella?, do: true
+
     defp notice_about_all_option(igniter, all_option) do
       file = igniter.args.positional[:file]
 
@@ -385,8 +388,8 @@ if Code.ensure_loaded?(Igniter) do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
       """
