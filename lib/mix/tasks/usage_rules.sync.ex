@@ -304,7 +304,8 @@ if Code.ensure_loaded?(Igniter) do
         link_to_folder && is_nil(igniter.args.positional[:file]) ->
           Igniter.add_issue(igniter, "--link-to-folder option requires a file to write to")
 
-        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing nor --folder-only is set, add error
+        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing nor --folder-only is
+        # set, add error
         Enum.empty?(provided_packages) && !all_option && !list_option && !remove_option &&
           !remove_missing_option && !folder_only ->
           add_usage_error(igniter)
@@ -846,13 +847,12 @@ if Code.ensure_loaded?(Igniter) do
 
           section_names =
             rules
-            |> Enum.map(fn {_name, _path, sub_rule} ->
+            |> Enum.map_join(", ", fn {_name, _path, sub_rule} ->
               case sub_rule do
                 nil -> to_string(package_name)
                 sub_rule_name -> "#{package_name}:#{sub_rule_name}"
               end
             end)
-            |> Enum.join(", ")
 
           acc
           |> Igniter.add_notice(
