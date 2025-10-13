@@ -80,7 +80,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         {:error, [error_message]} ->
           assert String.contains?(
                    error_message,
-                   "Cannot specify packages when using --all or --list options"
+                   "Cannot specify packages when using --all option"
                  )
 
         result ->
@@ -146,8 +146,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
@@ -191,8 +191,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
@@ -434,8 +434,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -504,8 +504,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -559,8 +559,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
@@ -600,8 +600,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -723,8 +723,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -776,8 +776,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -877,8 +877,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -908,8 +908,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -943,8 +943,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -1013,8 +1013,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -1052,8 +1052,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         <!-- usage-rules-header -->
         # Usage Rules
 
-        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-        Before attempting to use any of these packages or to discover if you should use them, review their 
+        **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+        Before attempting to use any of these packages or to discover if you should use them, review their
         usage rules to understand the correct patterns, conventions, and best practices.
         <!-- usage-rules-header-end -->
 
@@ -1181,8 +1181,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
@@ -1236,8 +1236,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
@@ -1296,8 +1296,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       <!-- usage-rules-header -->
       # Usage Rules
 
-      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below. 
-      Before attempting to use any of these packages or to discover if you should use them, review their 
+      **IMPORTANT**: Consult these usage rules early and often when working with the packages listed below.
+      Before attempting to use any of these packages or to discover if you should use them, review their
       usage rules to understand the correct patterns, conventions, and best practices.
       <!-- usage-rules-header-end -->
 
