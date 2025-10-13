@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 name: CI
 on:
   push:
@@ -15,3 +19,4 @@ jobs:
     with:
       spark-formatter: false
       spark-cheat-sheets: false
+      reuse: true

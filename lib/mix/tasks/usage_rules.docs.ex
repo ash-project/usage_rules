@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Mix.Tasks.UsageRules.Docs do
   use Mix.Task
 

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Mix.Tasks.UsageRules.SearchDocs do
   use Mix.Task
   # This will eventually be replaced with something like `mix hex.docs.search` ideally

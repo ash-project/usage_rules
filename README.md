@@ -1,3 +1,14 @@
+<!--
+SPDX-FileCopyrightText: 2025 Zach Daniel
+
+SPDX-License-Identifier: MIT
+-->
+[![CI](https://github.com/ash-project/usage_rules/actions/workflows/elixir.yml/badge.svg)](https://github.com/ash-project/usage_rules/actions/workflows/elixir.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Hex version badge](https://img.shields.io/hexpm/v/usage_rules.svg)](https://hex.pm/packages/usage_rules)
+[![Hexdocs badge](https://img.shields.io/badge/docs-hexdocs-purple)](https://hexdocs.pm/usage_rules)
+[![REUSE status](https://api.reuse.software/badge/github.com/ash-project/usage_rules)](https://api.reuse.software/info/github.com/ash-project/usage_rules)
+
 # UsageRules
 
 **UsageRules** is a development tool for Elixir projects that:

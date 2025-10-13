@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 Zach Daniel
+
+SPDX-License-Identifier: MIT
+-->
+
 # Change Log
 
 All notable changes to this project will be documented in this file.

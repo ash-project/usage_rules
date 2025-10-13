@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 defmodule UsageRules.MixProject do
   use Mix.Project
 
@@ -28,17 +32,20 @@ defmodule UsageRules.MixProject do
 
   defp package do
     [
-      name: :usage_rules,
+      maintainers: [
+        "Zach Daniel <zach@zachdaniel.dev>"
+      ],
       licenses: ["MIT"],
       maintainers: "Zach Daniel",
       files:
         ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG* usage-rules usage-rules.md),
       links: %{
-        "GitHub" => @source_url,
+        "GitHub" => "https://github.com/ash-project/usage_rules",
+        "Changelog" => "https://github.com/ash-project/usage_rules/blob/main/CHANGELOG.md",
         "Discord" => "https://discord.gg/HTHRaaVPUc",
         "Website" => "https://ash-hq.org",
-        "Forum" => "https://elixirforum.com/c/ash-framework-forum/",
-        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+        "Forum" => "https://elixirforum.com/c/elixir-framework-forums/ash-framework-forum",
+        "REUSE Compliance" => "https://api.reuse.software/info/github.com/ash-project/usage_rules"
       }
     ]
   end
