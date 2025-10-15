@@ -212,11 +212,21 @@ if Code.ensure_loaded?(Igniter) do
       top_level_deps =
         Mix.Project.get().project()[:deps] |> Enum.map(&elem(&1, 0))
 
+      umbrella_deps =
+        (Mix.Project.apps_paths() || [])
+        |> Enum.flat_map(fn {app, path} ->
+          Mix.Project.in_project(app, path, fn _ ->
+            Mix.Project.get().project()[:deps] |> Enum.map(&elem(&1, 0))
+          end)
+        end)
+
+      all_deps = Enum.uniq(top_level_deps ++ umbrella_deps)
+
       # Get all deps from both Mix.Project.deps_paths and Igniter rewrite sources
       mix_deps =
         Mix.Project.deps_paths()
         |> Enum.filter(fn {dep, _path} ->
-          dep in top_level_deps
+          dep in all_deps
         end)
         |> Enum.map(fn {dep, path} ->
           {dep, Path.relative_to_cwd(path)}
