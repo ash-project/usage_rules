@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v0.1.26 (2025-11-05)
+
+
+
+
+### Bug Fixes:
+
+* Include rules from all apps in umbrella project (#37) by Nathan Alderson
+
 ## v0.1.25 (2025-10-14)
 
 
