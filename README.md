@@ -63,12 +63,12 @@ Make sure that your `usage-rules.md` file is included in your hex package's `fil
 
 ### Sub rules
 
-A package can have a `package-rules.md` and/or sub-rule files, each of which is referred to separately.
+A package can have a `usage-rules.md` and/or sub-rule files, each of which is referred to separately.
 For example:
 
 ```
-package-rules.md # general rules
-package-rules/
+usage-rules.md # general rules
+usage-rules/
   html.md # html specific rules
   database.md # database specific rules
 ```
