@@ -49,8 +49,6 @@ mix usage_rules.sync AGENTS.md --all \
 
 Yes, and we have data to back it up: https://github.com/ash-project/evals/blob/main/reports/flagship.md
 
-You'll note this package itself doesn't have a usage-rules.md. Its a simple tool that likely would not benefit from having a usage-rules.md file.
-
 `usage-rules.md` is not an existing standard, rather it is a community initiative that may evolve over time as adoption grows and feedback is gathered. We encourage experimentation and welcome input on how to make this approach more useful for the broader Elixir ecosystem.
 
 ## For Package Authors
@@ -65,12 +63,12 @@ Make sure that your `usage-rules.md` file is included in your hex package's `fil
 
 ### Sub rules
 
-A package can have a `package-rules.md` and/or sub-rule files, each of which is referred to separately.
+A package can have a `usage-rules.md` and/or sub-rule files, each of which is referred to separately.
 For example:
 
 ```
-package-rules.md # general rules
-package-rules/
+usage-rules.md # general rules
+usage-rules/
   html.md # html specific rules
   database.md # database specific rules
 ```
