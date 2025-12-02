@@ -1351,4 +1351,155 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       end
     end
   end
+
+  describe "--claude-skills option" do
+    test "generates skill directories with SKILL.md files" do
+      test_project(
+        files: %{
+          "deps/ash_postgres/usage-rules.md" => "# Ash PostgreSQL Usage"
+        }
+      )
+      |> Igniter.compose_task("usage_rules.sync", ["--claude-skills", "ash_postgres"])
+      |> assert_has_notice("Generating Claude Skill for: ash_postgres")
+      |> assert_creates(".claude/skills/ash-postgres/SKILL.md")
+    end
+
+    test "generates skills with correct frontmatter and content" do
+      test_project(
+        files: %{
+          "deps/ash_postgres/usage-rules.md" => """
+          # Ash PostgreSQL Usage
+
+          ## Overview
+          AshPostgres provides PostgreSQL data layer integration for Ash Framework applications.
+
+          ## Best Practices
+          - Always use migrations
+          - Configure proper indexes
+          """
+        }
+      )
+      |> Igniter.compose_task("usage_rules.sync", ["--claude-skills", "ash_postgres"])
+      |> assert_creates(".claude/skills/ash-postgres/SKILL.md")
+      |> assert_content_equals(".claude/skills/ash-postgres/SKILL.md", """
+      ---
+      name: ash-postgres
+      description: Ash PostgreSQL Usage
+      ---
+
+      # Ash PostgreSQL Usage
+
+      ## Overview
+      AshPostgres provides PostgreSQL data layer integration for Ash Framework applications.
+
+      ## Best Practices
+      - Always use migrations
+      - Configure proper indexes
+      """)
+    end
+
+    test "works with --all option" do
+      test_project(
+        files: %{
+          "deps/ash/usage-rules.md" => "Ash rules",
+          "deps/phoenix/usage-rules.md" => "Phoenix rules"
+        }
+      )
+      |> Igniter.compose_task("usage_rules.sync", ["--claude-skills", "--all"])
+      |> assert_creates(".claude/skills/ash/SKILL.md")
+      |> assert_content_equals(".claude/skills/ash/SKILL.md", """
+      ---
+      name: ash
+      description: Ash Rules
+      ---
+
+      Ash rules
+      """)
+      |> assert_creates(".claude/skills/phoenix/SKILL.md")
+      |> assert_content_equals(".claude/skills/phoenix/SKILL.md", """
+      ---
+      name: phoenix
+      description: Phoenix Rules
+      ---
+
+      Phoenix rules
+      """)
+    end
+
+    test "handles sub-rules as separate skills" do
+      test_project(
+        files: %{
+          "deps/ash/usage-rules/testing.md" => "Ash testing rules"
+        }
+      )
+      |> Igniter.compose_task("usage_rules.sync", ["--claude-skills", "ash:testing"])
+      |> assert_creates(".claude/skills/ash-testing/SKILL.md")
+      |> assert_content_equals(".claude/skills/ash-testing/SKILL.md", """
+      ---
+      name: ash-testing
+      description: Ash Testing Rules
+      ---
+
+      Ash testing rules
+      """)
+    end
+
+    test "cannot be used with --link-to-folder" do
+      igniter =
+        test_project()
+        |> Igniter.compose_task("usage_rules.sync", [
+          "--claude-skills",
+          "ash",
+          "--link-to-folder",
+          "rules"
+        ])
+
+      case apply_igniter(igniter) do
+        {:error, [error_message]} ->
+          assert String.contains?(
+                   error_message,
+                   "--claude-skills cannot be used with"
+                 )
+
+        result ->
+          flunk("Expected error, got: #{inspect(result)}")
+      end
+    end
+
+    test "handles varied usage rule formats correctly ignoring comments" do
+      test_project(
+        files: %{
+          "deps/ecto/usage-rules.md" => """
+          <!--
+          |SPDX-FileCopyrightText: 2020
+          |
+          |SPDX-License-Identifier: MIT
+          |-->
+
+          ## H2 only
+
+          - bullet
+          """
+        }
+      )
+      |> Igniter.compose_task("usage_rules.sync", ["--claude-skills", "ecto"])
+      |> assert_creates(".claude/skills/ecto/SKILL.md")
+      |> assert_content_equals(".claude/skills/ecto/SKILL.md", """
+      ---
+      name: ecto
+      description: H2 only
+      ---
+
+      <!--
+      |SPDX-FileCopyrightText: 2020
+      |
+      |SPDX-License-Identifier: MIT
+      |-->
+
+      ## H2 only
+
+      - bullet
+      """)
+    end
+  end
 end

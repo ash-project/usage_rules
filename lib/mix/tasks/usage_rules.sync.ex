@@ -187,7 +187,8 @@ if Code.ensure_loaded?(Igniter) do
           link_style: :string,
           inline: :string,
           folder_only: :string,
-          merge_sub_rules: :boolean
+          merge_sub_rules: :boolean,
+          claude_skills: :boolean
         ]
       }
     end
@@ -244,15 +245,23 @@ if Code.ensure_loaded?(Igniter) do
       inline_specs = parse_inline_specs(igniter.args.options[:inline])
       folder_only = igniter.args.options[:folder_only]
       merge_sub_rules = igniter.args.options[:merge_sub_rules] || false
-      # Fix argument parsing for folder-only: when no file should be specified,
+      claude_skills = igniter.args.options[:claude_skills] || false
+      # Fix argument parsing for folder-only and claude-skills: when no file should be specified,
       # the first argument gets incorrectly parsed as 'file' instead of the first package
       provided_packages =
-        if folder_only && igniter.args.positional[:file] &&
-             !File.exists?(igniter.args.positional[:file]) do
-          # The 'file' is actually the first package
-          [igniter.args.positional[:file]] ++ (igniter.args.positional.packages || [])
-        else
-          igniter.args.positional.packages || []
+        cond do
+          # For claude-skills, manually parse from argv since Igniter misparses positional args as flags
+          claude_skills ->
+            igniter.args.argv
+            |> Enum.reject(&String.starts_with?(&1, "--"))
+
+          (folder_only && igniter.args.positional[:file] &&
+             !File.exists?(igniter.args.positional[:file])) ->
+            # The 'file' is actually the first package
+            [igniter.args.positional[:file]] ++ (igniter.args.positional.packages || [])
+
+          true ->
+            igniter.args.positional.packages || []
         end
 
       cond do
@@ -267,6 +276,13 @@ if Code.ensure_loaded?(Igniter) do
         # If --merge-sub-rules is used without --folder-only, add error
         merge_sub_rules && !folder_only ->
           Igniter.add_issue(igniter, "--merge-sub-rules can only be used with --folder-only")
+
+        # If --claude-skills is used with incompatible options, add error
+        claude_skills && (list_option || remove_option || remove_missing_option || link_to_folder || folder_only) ->
+          Igniter.add_issue(
+            igniter,
+            "--claude-skills cannot be used with --list, --remove, --remove-missing, --link-to-folder, or --folder-only options"
+          )
 
         # If --folder-only is used with incompatible options, add error
         folder_only && (list_option || remove_option || remove_missing_option || link_to_folder) ->
@@ -306,23 +322,32 @@ if Code.ensure_loaded?(Igniter) do
         list_option && !Enum.empty?(provided_packages) ->
           Igniter.add_issue(igniter, "Cannot specify packages when using --list option")
 
-        # If --all is given and packages list is not empty (except with --folder-only), add error
-        all_option && !Enum.empty?(provided_packages) && !folder_only ->
+        # If --all is given and packages list is not empty (except with --folder-only or --claude-skills), add error
+        all_option && !Enum.empty?(provided_packages) && !folder_only && !claude_skills ->
           Igniter.add_issue(igniter, "Cannot specify packages when using --all option")
 
-        # If --all is used without a file (and not with --folder-only), add error
-        all_option && is_nil(igniter.args.positional[:file]) && !folder_only ->
+        # If --all is used without a file (and not with --folder-only or --claude-skills), add error
+        all_option && is_nil(igniter.args.positional[:file]) && !folder_only && !claude_skills ->
           Igniter.add_issue(igniter, "--all option requires a file to write to")
 
         # If --link-to-folder is used without a file, add error
         link_to_folder && is_nil(igniter.args.positional[:file]) ->
           Igniter.add_issue(igniter, "--link-to-folder option requires a file to write to")
 
-        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing nor --folder-only is
+        # If no packages are given and neither --list nor --all nor --remove nor --remove-missing nor --folder-only nor --claude-skills is
         # set, add error
         Enum.empty?(provided_packages) && !all_option && !list_option && !remove_option &&
-          !remove_missing_option && !folder_only ->
+          !remove_missing_option && !folder_only && !claude_skills ->
           add_usage_error(igniter)
+
+        # Handle --claude-skills option
+        claude_skills ->
+          handle_claude_skills_option(
+            igniter,
+            all_deps,
+            provided_packages,
+            all_option
+          )
 
         # Handle --folder-only option
         folder_only ->
@@ -943,6 +968,201 @@ if Code.ensure_loaded?(Igniter) do
           )
         end)
       end
+    end
+
+    defp handle_claude_skills_option(igniter, all_deps, provided_packages, all_option) do
+      skills_dir = ".claude/skills"
+
+      packages_to_process =
+        if all_option do
+          all_packages_with_rules = get_packages_with_usage_rules(igniter, all_deps)
+
+          all_packages_with_rules
+          |> Enum.flat_map(fn {package_name, package_path} ->
+            main_rules =
+              if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+                [{package_name, package_path, nil}]
+              else
+                []
+              end
+
+            sub_rules =
+              find_available_sub_rules(igniter, package_path)
+              |> Enum.map(fn sub_rule_name ->
+                {package_name, package_path, sub_rule_name}
+              end)
+
+            main_rules ++ sub_rules
+          end)
+        else
+          expanded_packages = expand_wildcard_specs(igniter, all_deps, provided_packages)
+
+          expanded_packages
+          |> Enum.flat_map(fn package_spec ->
+            {package_name, sub_rule} = parse_package_spec(package_spec)
+
+            case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
+              {_name, package_path} ->
+                case sub_rule do
+                  nil ->
+                    usage_rules_path = Path.join(package_path, "usage-rules.md")
+
+                    if Igniter.exists?(igniter, usage_rules_path) do
+                      [{package_name, package_path, nil}]
+                    else
+                      []
+                    end
+
+                  sub_rule_name ->
+                    sub_rule_path =
+                      Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
+
+                    if Igniter.exists?(igniter, sub_rule_path) do
+                      [{package_name, package_path, sub_rule_name}]
+                    else
+                      []
+                    end
+                end
+
+              nil ->
+                []
+            end
+          end)
+        end
+
+      # Generate Claude Skills format for each package
+      Enum.reduce(packages_to_process, igniter, fn {name, path, sub_rule}, acc ->
+        usage_rules_path =
+          case sub_rule do
+            nil ->
+              Path.join(path, "usage-rules.md")
+
+            sub_rule_name ->
+              Path.join([path, "usage-rules", "#{sub_rule_name}.md"])
+          end
+
+        content =
+          case Rewrite.source(acc.rewrite, usage_rules_path) do
+            {:ok, source} -> Rewrite.Source.get(source, :content)
+            {:error, _} -> File.read!(usage_rules_path)
+          end
+
+        skill_name =
+          case sub_rule do
+            nil ->
+              name
+              |> to_string()
+              |> String.replace("_", "-")
+
+            sub_rule_name ->
+              base_name =
+                name
+                |> to_string()
+                |> String.replace("_", "-")
+
+              formatted_sub =
+                sub_rule_name
+                |> String.replace("_", "-")
+
+              "#{base_name}-#{formatted_sub}"
+          end
+
+        # Extract description from first heading (H1 or H2) or first line of text
+        # Ignore HTML comments when finding the first line
+        description =
+          content
+          |> String.split("\n")
+          |> Enum.reduce({[], false}, fn line, {acc, in_comment} ->
+            trimmed = String.trim(line)
+
+            cond do
+              # Start of HTML comment
+              String.contains?(line, "<!--") ->
+                # Check if it's a single-line comment
+                if String.contains?(line, "-->") do
+                  {acc, false}
+                else
+                  {acc, true}
+                end
+
+              # End of HTML comment
+              String.contains?(line, "-->") ->
+                {acc, false}
+
+              # Inside comment, skip
+              in_comment ->
+                {acc, true}
+
+              # Not in comment and not empty
+              trimmed != "" ->
+                {[line | acc], false}
+
+              # Empty line, skip
+              true ->
+                {acc, false}
+            end
+          end)
+          |> elem(0)
+          |> Enum.reverse()
+          |> List.first()
+          |> case do
+            nil ->
+              # No content found
+              "Usage guidelines for #{skill_name}"
+
+            line ->
+              trimmed = String.trim(line)
+
+              # Check if this is a heading
+              if String.match?(trimmed, ~r/^#+\s+/) do
+                # It's a heading - remove markdown and use as-is
+                trimmed
+                |> String.replace(~r/^#+\s*/, "")
+                |> String.trim()
+              else
+                # It's plain text - title-case it
+                trimmed
+                |> String.split(" ")
+                |> Enum.map(&String.capitalize/1)
+                |> Enum.join(" ")
+              end
+          end
+
+        # Generate YAML frontmatter + content (without quotes)
+        # Trim content to avoid extra trailing newlines, but keep HTML comments
+        trimmed_content = String.trim_trailing(content)
+
+        skill_content = """
+        ---
+        name: #{skill_name}
+        description: #{description}
+        ---
+
+        #{trimmed_content}
+        """
+
+        # Create skill directory path (e.g., .claude/skills/ash-postgres/)
+        skill_dir_path = Path.join(skills_dir, skill_name)
+        skill_file_path = Path.join(skill_dir_path, "SKILL.md")
+
+        section_name =
+          case sub_rule do
+            nil -> to_string(name)
+            sub_rule_name -> "#{name}:#{sub_rule_name}"
+          end
+
+        acc
+        |> Igniter.add_notice(
+          "Generating Claude Skill for: #{section_name}"
+        )
+        |> Igniter.create_or_update_file(
+          skill_file_path,
+          skill_content,
+          fn source ->
+            Rewrite.Source.update(source, :content, skill_content)
+          end
+        )
+      end)
     end
 
     defp get_packages_with_usage_rules(igniter, all_deps) do
