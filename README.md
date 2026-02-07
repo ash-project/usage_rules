@@ -56,8 +56,7 @@ end
 defp usage_rules do
   [
     file: "AGENTS.md",
-    usage_rules: :all,
-    link_to_folder: "deps"
+    usage_rules: :all
   ]
 end
 ```
@@ -79,23 +78,17 @@ defp usage_rules do
     file: "AGENTS.md",
 
     # Which packages to include (required for usage_rules syncing)
-    # :all discovers every dependency with a usage-rules.md
+    # :all discovers every dependency with a usage-rules.md and inlines them
     usage_rules: :all,
     # Or list specific packages and sub-rules:
     # usage_rules: [
-    #   :ash,                    # main usage-rules.md
-    #   "phoenix:ecto",          # specific sub-rule
-    #   :elixir,                 # built-in Elixir rules
-    #   :otp,                    # built-in OTP rules
+    #   :ash,                         # inlined (default)
+    #   "phoenix:ecto",               # specific sub-rule (inlined)
+    #   {:req, link: :at},            # linked with @-style
+    #   {:ecto, link: :markdown},     # linked with markdown-style
+    #   :elixir,                      # built-in Elixir rules
+    #   :otp,                         # built-in OTP rules
     # ],
-
-    # Link style instead of inlining full content (recommended)
-    link_to_folder: "deps",      # links to deps/<pkg>/usage-rules.md
-    # link_to_folder: "rules",   # copies files into rules/ folder and links there
-    link_style: "markdown",      # "markdown" (default) or "at" for @-style links
-
-    # Force-inline specific packages even when using link_to_folder
-    inline: ["usage_rules:all"],
 
     # Agent skills configuration
     skills: [
@@ -131,10 +124,20 @@ end
 |--------|------|-------------|
 | `file` | `string` | Target file for usage rules (e.g. `"AGENTS.md"`, `"CLAUDE.md"`) |
 | `usage_rules` | `:all \| list` | Which packages to sync. `:all` auto-discovers, or list specific packages |
-| `link_to_folder` | `string \| nil` | Create links instead of inlining. `"deps"` links to dep sources directly |
-| `link_style` | `"markdown" \| "at"` | Link format. `"at"` uses `@path` style (default: `"markdown"`) |
-| `inline` | `list` | Force-inline specific packages when using `link_to_folder` |
 | `skills` | `keyword` | Agent skills configuration (see below) |
+
+### Usage rules entry format
+
+Each entry in the `usage_rules` list can be:
+
+| Format | Description |
+|--------|-------------|
+| `:package` | Inline the package's usage rules (default) |
+| `"package:sub_rule"` | Inline a specific sub-rule |
+| `"package:all"` | Inline all sub-rules from a package |
+| `{:package, link: :at}` | Link with `@deps/package/usage-rules.md` style |
+| `{:package, link: :markdown}` | Link with `[name](deps/package/usage-rules.md)` style |
+| `{"package:sub_rule", link: :at}` | Link a specific sub-rule with @-style |
 
 ### Skills options
 
@@ -148,14 +151,13 @@ end
 
 ### Sync all dependencies
 
-The simplest setup — discover all deps with `usage-rules.md` and link to them:
+The simplest setup — discover all deps with `usage-rules.md` and inline them:
 
 ```elixir
 defp usage_rules do
   [
     file: "AGENTS.md",
-    usage_rules: :all,
-    link_to_folder: "deps"
+    usage_rules: :all
   ]
 end
 ```
@@ -168,8 +170,7 @@ Pick exactly which packages to include:
 defp usage_rules do
   [
     file: "AGENTS.md",
-    usage_rules: [:ash, :phoenix, :ecto],
-    link_to_folder: "deps"
+    usage_rules: [:ash, :phoenix, :ecto]
   ]
 end
 ```
@@ -196,17 +197,20 @@ UsageRules ships with built-in rules for Elixir and OTP:
 usage_rules: [:elixir, :otp, :ash, :phoenix]
 ```
 
-### Inline with folder links
+### Linking instead of inlining
 
-When using `link_to_folder`, you can force specific packages to be inlined:
+By default, usage rules are inlined directly into the target file. You can link to specific packages instead using the `link` option:
 
 ```elixir
 defp usage_rules do
   [
     file: "AGENTS.md",
-    usage_rules: [:ash, :phoenix, :usage_rules],
-    link_to_folder: "deps",
-    inline: ["usage_rules:all"]  # inline the usage_rules package's built-in rules
+    usage_rules: [
+      :ash,                          # inlined
+      {:phoenix, link: :at},         # @deps/phoenix/usage-rules.md
+      {:ecto, link: :markdown},      # [ecto usage rules](deps/ecto/usage-rules.md)
+      {"phoenix:html", link: :at}    # @deps/phoenix/usage-rules/html.md
+    ]
   ]
 end
 ```
@@ -214,6 +218,8 @@ end
 ## Agent Skills
 
 Skills are SKILL.md files that agent tools like Claude Code can discover and use. UsageRules can automatically generate skills from your dependencies' usage rules.
+
+Generated skills use markers to delimit managed content. You can add custom content above the markers in any SKILL.md — it will be preserved across syncs.
 
 ### Auto-build skills from deps
 
@@ -224,7 +230,6 @@ defp usage_rules do
   [
     file: "AGENTS.md",
     usage_rules: :all,
-    link_to_folder: "deps",
     skills: [
       deps: [:ash, :req]
     ]
@@ -264,7 +269,7 @@ skills: [
 
 ### Stale skill cleanup
 
-Skills generated by UsageRules include a `managed-by: usage-rules` marker in their YAML frontmatter. When a skill is removed from your config and you re-run `mix usage_rules.sync`, the stale skill files are automatically cleaned up.
+Skills generated by UsageRules include a `managed-by: usage-rules` marker in their YAML frontmatter. When a skill is removed from your config and you re-run `mix usage_rules.sync`, the stale skill files are automatically cleaned up. If you've added custom content to a managed skill, only the managed section is removed — your custom content is preserved.
 
 ### Skills-only mode
 
@@ -343,11 +348,29 @@ def project do
   [
     usage_rules: [
       file: "AGENTS.md",
-      usage_rules: :all,
-      link_to_folder: "deps"
+      usage_rules: :all
     ]
   ]
 end
 ```
 
 Then just run `mix usage_rules.sync` with no arguments.
+
+### Migrating from v0.2
+
+v1.0 removes `link_to_folder`, `link_style`, and `inline` options. Content is inlined by default. Use per-dep `link` option for linking:
+
+```elixir
+# Before (v0.2)
+usage_rules: :all,
+link_to_folder: "deps",
+link_style: "at",
+inline: ["usage_rules:all"]
+
+# After (v1.0)
+usage_rules: [
+  {:ash, link: :at},
+  {:phoenix, link: :at},
+  "usage_rules:all"    # inlined by default
+]
+```

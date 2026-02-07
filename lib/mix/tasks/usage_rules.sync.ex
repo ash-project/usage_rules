@@ -39,9 +39,9 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
       [
         file: "AGENTS.md",
         usage_rules: [
-          :ash,                          # main usage-rules.md
-          "phoenix:ecto",                # specific sub-rule
-          :req,
+          :ash,                          # main usage-rules.md (inlined)
+          "phoenix:ecto",                # specific sub-rule (inlined)
+          {:req, link: :at},             # linked with @-style
         ],
         # or: usage_rules: :all
         skills: [
@@ -53,10 +53,7 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
               usage_rules: [:ash, :ash_postgres, :ash_json_api]
             ]
           ]
-        ],
-        link_to_folder: "deps",
-        link_style: "markdown",          # "markdown" or "at"
-        inline: ["usage_rules:all"]        # force-inline specific specs
+        ]
       ]
     end
     ```
@@ -99,9 +96,7 @@ if Code.ensure_loaded?(Igniter) do
             defp usage_rules do
               [
                 file: "AGENTS.md",
-                usage_rules: :all,
-                link_to_folder: "deps",
-                link_style: "markdown"
+                usage_rules: :all
               ]
             end
 
@@ -184,18 +179,34 @@ if Code.ensure_loaded?(Igniter) do
                defp usage_rules do
                  [
                    file: "AGENTS.md",
-                   usage_rules: [:ash, :phoenix],
-                   link_to_folder: "deps"
+                   usage_rules: [:ash, :phoenix]
                  ]
                end
            """}
 
-        config[:link_style] && config[:link_style] not in ["markdown", "at"] ->
-          {:error, "usage_rules link_style must be \"markdown\" or \"at\""}
+        (link_error = validate_link_options(config[:usage_rules])) != nil ->
+          {:error, link_error}
 
         true ->
           :ok
       end
+    end
+
+    defp validate_link_options(nil), do: nil
+    defp validate_link_options(:all), do: nil
+
+    defp validate_link_options(specs) when is_list(specs) do
+      Enum.find_value(specs, fn
+        {_inner, opts} when is_list(opts) ->
+          case opts[:link] do
+            nil -> nil
+            style when style in [:at, :markdown] -> nil
+            other -> "usage_rules link must be :at or :markdown, got: #{inspect(other)}"
+          end
+
+        _ ->
+          nil
+      end)
     end
 
     defp include_dep_sources(igniter) do
@@ -214,9 +225,6 @@ if Code.ensure_loaded?(Igniter) do
       file = config[:file]
       usage_rules_config = config[:usage_rules]
       skills_config = config[:skills] || []
-      link_to_folder = config[:link_to_folder]
-      link_style = config[:link_style] || "markdown"
-      inline_specs = parse_inline_specs(config[:inline])
 
       # Resolve usage rules packages
       {package_rules, errors} = resolve_usage_rules(igniter, all_deps, usage_rules_config)
@@ -232,14 +240,7 @@ if Code.ensure_loaded?(Igniter) do
       igniter =
         cond do
           file && !Enum.any?(errors) && Enum.any?(package_rules) ->
-            generate_usage_rules(
-              igniter,
-              file,
-              package_rules,
-              link_to_folder,
-              link_style,
-              inline_specs
-            )
+            generate_usage_rules(igniter, file, package_rules)
 
           file && Igniter.exists?(igniter, file) ->
             cleanup_stale_usage_rules_section(igniter, file)
@@ -366,7 +367,7 @@ if Code.ensure_loaded?(Igniter) do
     defp resolve_usage_rules(igniter, all_deps, specs) when is_list(specs) do
       {rules, errors} =
         Enum.reduce(specs, {[], []}, fn spec, {rules_acc, errors_acc} ->
-          {package_name, sub_rule} = parse_spec(spec)
+          {package_name, sub_rule, opts} = parse_spec(spec)
 
           case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
             {_name, package_path} ->
@@ -374,7 +375,7 @@ if Code.ensure_loaded?(Igniter) do
                 "all" ->
                   found =
                     find_available_sub_rules(igniter, package_path)
-                    |> Enum.map(fn sr -> {package_name, package_path, sr, []} end)
+                    |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
 
                   if Enum.any?(found) do
                     {rules_acc ++ found, errors_acc}
@@ -388,7 +389,7 @@ if Code.ensure_loaded?(Igniter) do
 
                 nil ->
                   if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
-                    {rules_acc ++ [{package_name, package_path, nil, []}], errors_acc}
+                    {rules_acc ++ [{package_name, package_path, nil, opts}], errors_acc}
                   else
                     {rules_acc,
                      errors_acc ++
@@ -401,7 +402,7 @@ if Code.ensure_loaded?(Igniter) do
                   sub_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
 
                   if Igniter.exists?(igniter, sub_path) do
-                    {rules_acc ++ [{package_name, package_path, sub_rule_name, []}], errors_acc}
+                    {rules_acc ++ [{package_name, package_path, sub_rule_name, opts}], errors_acc}
                   else
                     {rules_acc,
                      errors_acc ++
@@ -428,7 +429,17 @@ if Code.ensure_loaded?(Igniter) do
       otp: {:usage_rules, "otp"}
     }
 
+    defp parse_spec({inner, opts}) when is_list(opts) do
+      {name, sub_rule} = parse_spec_name(inner)
+      {name, sub_rule, opts}
+    end
+
     defp parse_spec(spec) do
+      {name, sub_rule} = parse_spec_name(spec)
+      {name, sub_rule, []}
+    end
+
+    defp parse_spec_name(spec) do
       case spec do
         atom when is_atom(atom) and is_map_key(@builtin_aliases, atom) ->
           @builtin_aliases[atom]
@@ -504,29 +515,7 @@ if Code.ensure_loaded?(Igniter) do
       end)
     end
 
-    defp generate_usage_rules(
-           igniter,
-           file,
-           package_rules,
-           link_to_folder,
-           link_style,
-           inline_specs
-         ) do
-      if link_to_folder do
-        generate_with_folder_links(
-          igniter,
-          file,
-          package_rules,
-          link_to_folder,
-          link_style,
-          inline_specs
-        )
-      else
-        generate_inline(igniter, file, package_rules)
-      end
-    end
-
-    defp generate_inline(igniter, file, package_rules) do
+    defp generate_usage_rules(igniter, file, package_rules) do
       package_contents = build_package_contents(igniter, package_rules)
       all_rules_content = Enum.map_join(package_contents, "\n", &elem(&1, 1))
 
@@ -547,87 +536,21 @@ if Code.ensure_loaded?(Igniter) do
       )
     end
 
-    defp generate_with_folder_links(
-           igniter,
-           file,
-           package_rules,
-           folder_name,
-           link_style,
-           inline_specs
-         ) do
-      # Create individual files in the folder (unless folder is "deps")
-      igniter =
-        if folder_name == "deps" do
-          igniter
-        else
-          Enum.reduce(package_rules, igniter, fn {name, path, sub_rule, _opts}, acc ->
-            if should_inline?(name, sub_rule, inline_specs) do
-              acc
-            else
-              {usage_rules_path, target_file_name} = usage_rules_paths(name, path, sub_rule)
-
-              content = read_dep_content(acc, usage_rules_path)
-              package_file_path = Path.join(folder_name, target_file_name)
-
-              Igniter.create_or_update_file(
-                acc,
-                package_file_path,
-                content,
-                fn source -> Rewrite.Source.update(source, :content, content) end
-              )
-            end
-          end)
-        end
-
-      # Build the main file with links or inline content
-      package_contents =
-        Enum.map(package_rules, fn {name, path, sub_rule, _opts} ->
-          section_name = section_name_for(name, sub_rule)
-          description = package_description(name, sub_rule)
-          description_part = if description == "", do: "", else: "_#{description}_\n\n"
-
-          content =
-            if should_inline?(name, sub_rule, inline_specs) do
-              {usage_rules_path, _} = usage_rules_paths(name, path, sub_rule)
-              read_dep_content(igniter, usage_rules_path)
-            else
-              build_link(name, sub_rule, section_name, folder_name, link_style)
-            end
-
-          {section_name,
-           "<!-- #{section_name}-start -->\n" <>
-             "## #{section_name} usage\n" <>
-             description_part <>
-             content <>
-             "\n<!-- #{section_name}-end -->"}
-        end)
-
-      all_rules_content = Enum.map_join(package_contents, "\n", &elem(&1, 1))
-
-      full_contents =
-        "<!-- usage-rules-start -->\n" <>
-          all_rules_content <>
-          "\n<!-- usage-rules-end -->"
-
-      Igniter.create_or_update_file(
-        igniter,
-        file,
-        full_contents,
-        fn source ->
-          current = Rewrite.Source.get(source, :content)
-          new_content = replace_usage_rules_section(current, package_contents)
-          Rewrite.Source.update(source, :content, new_content)
-        end
-      )
-    end
-
     defp build_package_contents(igniter, package_rules) do
-      Enum.map(package_rules, fn {name, path, sub_rule, _opts} ->
+      Enum.map(package_rules, fn {name, path, sub_rule, opts} ->
         section_name = section_name_for(name, sub_rule)
-        {usage_rules_path, _} = usage_rules_paths(name, path, sub_rule)
-        content = read_dep_content(igniter, usage_rules_path)
         description = package_description(name, sub_rule)
         description_part = if description == "", do: "", else: "_#{description}_\n\n"
+
+        content =
+          case opts[:link] do
+            nil ->
+              {usage_rules_path, _} = usage_rules_paths(name, path, sub_rule)
+              read_dep_content(igniter, usage_rules_path)
+
+            link_style ->
+              build_link(name, sub_rule, section_name, link_style)
+          end
 
         {section_name,
          "<!-- #{section_name}-start -->\n" <>
@@ -685,17 +608,47 @@ if Code.ensure_loaded?(Igniter) do
 
       Enum.reduce(stale, igniter, fn skill_name, acc ->
         skill_dir = Path.join(skills_location, skill_name)
+        skill_path = Path.join(skill_dir, "SKILL.md")
 
-        paths_to_remove =
+        custom_content =
+          case Rewrite.source(acc.rewrite, skill_path) do
+            {:ok, source} ->
+              Rewrite.Source.get(source, :content)
+              |> extract_skill_custom_content()
+
+            {:error, _} ->
+              ""
+          end
+
+        if custom_content != "" do
+          # Preserve custom content, remove managed section and references
+          acc =
+            Igniter.update_file(acc, skill_path, fn source ->
+              content = Rewrite.Source.get(source, :content)
+              stripped = strip_managed_skill_content(content)
+              Rewrite.Source.update(source, :content, stripped)
+            end)
+
+          # Remove reference files but keep SKILL.md
           acc.rewrite.sources
           |> Enum.filter(fn {path, _source} ->
-            String.starts_with?(path, skill_dir <> "/")
+            String.starts_with?(path, skill_dir <> "/") && path != skill_path
           end)
           |> Enum.map(&elem(&1, 0))
+          |> Enum.reduce(acc, fn path, inner_acc -> Igniter.rm(inner_acc, path) end)
+        else
+          # No custom content, remove everything
+          paths_to_remove =
+            acc.rewrite.sources
+            |> Enum.filter(fn {path, _source} ->
+              String.starts_with?(path, skill_dir <> "/")
+            end)
+            |> Enum.map(&elem(&1, 0))
 
-        Enum.reduce(paths_to_remove, acc, fn path, inner_acc ->
-          Igniter.rm(inner_acc, path)
-        end)
+          Enum.reduce(paths_to_remove, acc, fn path, inner_acc ->
+            Igniter.rm(inner_acc, path)
+          end)
+        end
       end)
     end
 
@@ -775,7 +728,11 @@ if Code.ensure_loaded?(Igniter) do
           igniter,
           Path.join(skill_dir, "SKILL.md"),
           skill_md,
-          fn source -> Rewrite.Source.update(source, :content, skill_md) end
+          fn source ->
+            current = Rewrite.Source.get(source, :content)
+            new_content = update_skill_content(current, skill_md)
+            Rewrite.Source.update(source, :content, new_content)
+          end
         )
 
       # Reference files for sub-rules from all packages
@@ -813,7 +770,10 @@ if Code.ensure_loaded?(Igniter) do
 
       body = build_skill_body(igniter, skill_name, resolved_packages)
 
-      frontmatter <> "\n\n" <> body
+      frontmatter <> "\n\n" <>
+        "<!-- usage-rules-skill-start -->\n" <>
+        body <>
+        "\n<!-- usage-rules-skill-end -->"
     end
 
     defp build_skill_description(skill_name, resolved_packages) do
@@ -835,6 +795,24 @@ if Code.ensure_loaded?(Igniter) do
     defp build_skill_body(igniter, _skill_name, resolved_packages) do
       sections = []
 
+      # Sub-rules as references (at the top for discoverability)
+      all_sub_rules =
+        Enum.flat_map(resolved_packages, fn {_pkg_name, package_path} ->
+          find_available_sub_rules(igniter, package_path)
+        end)
+
+      sections =
+        if Enum.any?(all_sub_rules) do
+          ref_lines =
+            Enum.map_join(all_sub_rules, "\n", fn sub_rule ->
+              "- [#{sub_rule}](references/#{sub_rule}.md)"
+            end)
+
+          sections ++ ["## Additional References\n\n#{ref_lines}"]
+        else
+          sections
+        end
+
       # Usage rules content from all packages
       sections =
         Enum.reduce(resolved_packages, sections, fn {pkg_name, package_path}, acc ->
@@ -847,26 +825,6 @@ if Code.ensure_loaded?(Igniter) do
             acc
           end
         end)
-
-      # Mix tasks from all packages
-      all_mix_tasks =
-        Enum.flat_map(resolved_packages, fn {pkg_name, _path} ->
-          discover_mix_tasks(pkg_name)
-          |> Enum.map(fn {task, doc} -> {pkg_name, task, doc} end)
-        end)
-
-      sections =
-        if Enum.any?(all_mix_tasks) do
-          task_lines =
-            Enum.map_join(all_mix_tasks, "\n", fn {_pkg, task_name, shortdoc} ->
-              desc = if shortdoc, do: " - #{shortdoc}", else: ""
-              "- `mix #{task_name}`#{desc}"
-            end)
-
-          sections ++ ["## Available Mix Tasks\n\n#{task_lines}"]
-        else
-          sections
-        end
 
       # Search docs for all packages
       package_names = Enum.map(resolved_packages, &elem(&1, 0))
@@ -886,20 +844,22 @@ if Code.ensure_loaded?(Igniter) do
             |> String.trim_trailing()
           ]
 
-      # Sub-rules as references
-      all_sub_rules =
-        Enum.flat_map(resolved_packages, fn {_pkg_name, package_path} ->
-          find_available_sub_rules(igniter, package_path)
+      # Mix tasks from all packages (at the bottom)
+      all_mix_tasks =
+        Enum.flat_map(resolved_packages, fn {pkg_name, _path} ->
+          discover_mix_tasks(pkg_name)
+          |> Enum.map(fn {task, doc} -> {pkg_name, task, doc} end)
         end)
 
       sections =
-        if Enum.any?(all_sub_rules) do
-          ref_lines =
-            Enum.map_join(all_sub_rules, "\n", fn sub_rule ->
-              "- [#{sub_rule}](references/#{sub_rule}.md)"
+        if Enum.any?(all_mix_tasks) do
+          task_lines =
+            Enum.map_join(all_mix_tasks, "\n", fn {_pkg, task_name, shortdoc} ->
+              desc = if shortdoc, do: " - #{shortdoc}", else: ""
+              "- `mix #{task_name}`#{desc}"
             end)
 
-          sections ++ ["## Additional References\n\n#{ref_lines}"]
+          sections ++ ["## Available Mix Tasks\n\n#{task_lines}"]
         else
           sections
         end
@@ -1003,51 +963,72 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    defp build_link(name, nil, _section_name, folder_name, link_style) do
-      case {link_style, folder_name} do
-        {"at", "deps"} -> "@deps/#{name}/usage-rules.md"
-        {"at", _} -> "@#{folder_name}/#{name}.md"
-        {_, "deps"} -> "[#{name} usage rules](deps/#{name}/usage-rules.md)"
-        _ -> "[#{name} usage rules](#{folder_name}/#{name}.md)"
+    defp build_link(name, nil, _section_name, :at) do
+      "@deps/#{name}/usage-rules.md"
+    end
+
+    defp build_link(name, nil, _section_name, _link_style) do
+      "[#{name} usage rules](deps/#{name}/usage-rules.md)"
+    end
+
+    defp build_link(name, sub_rule, _section_name, :at) do
+      "@deps/#{name}/usage-rules/#{sub_rule}.md"
+    end
+
+    defp build_link(name, sub_rule, section_name, _link_style) do
+      "[#{section_name} usage rules](deps/#{name}/usage-rules/#{sub_rule}.md)"
+    end
+
+    defp extract_skill_custom_content(content) do
+      if String.contains?(content, "<!-- usage-rules-skill-start -->") do
+        [prelude, _] = String.split(content, "<!-- usage-rules-skill-start -->", parts: 2)
+
+        case Regex.run(~r/\A---\n.*?\n---\n*(.*)/s, prelude) do
+          [_, custom] -> String.trim(custom)
+          _ -> ""
+        end
+      else
+        ""
       end
     end
 
-    defp build_link(name, sub_rule, section_name, folder_name, link_style) do
-      case {link_style, folder_name} do
-        {"at", "deps"} -> "@deps/#{name}/usage-rules/#{sub_rule}.md"
-        {"at", _} -> "@#{folder_name}/#{name}_#{sub_rule}.md"
-        {_, "deps"} -> "[#{section_name} usage rules](deps/#{name}/usage-rules/#{sub_rule}.md)"
-        _ -> "[#{section_name} usage rules](#{folder_name}/#{name}_#{sub_rule}.md)"
+    defp update_skill_content(current_content, new_skill_md) do
+      if String.contains?(current_content, "<!-- usage-rules-skill-start -->") do
+        custom = extract_skill_custom_content(current_content)
+
+        if custom != "" do
+          [new_frontmatter, new_managed] =
+            String.split(new_skill_md, "\n\n<!-- usage-rules-skill-start -->", parts: 2)
+
+          new_frontmatter <>
+            "\n\n" <> custom <> "\n\n<!-- usage-rules-skill-start -->" <> new_managed
+        else
+          new_skill_md
+        end
+      else
+        new_skill_md
       end
     end
 
-    defp should_inline?(package_name, sub_rule, inline_specs) do
-      pkg_str = to_string(package_name)
+    defp strip_managed_skill_content(content) do
+      # Remove managed-by metadata from frontmatter
+      content = String.replace(content, ~r/metadata:\n\s+managed-by: usage-rules\n/, "")
 
-      section =
-        case sub_rule do
-          nil -> pkg_str
-          sr -> "#{pkg_str}:#{sr}"
-        end
+      # Remove managed section
+      if String.contains?(content, "<!-- usage-rules-skill-start -->") do
+        [prelude, rest] =
+          String.split(content, "\n\n<!-- usage-rules-skill-start -->\n", parts: 2)
 
-      Enum.any?(inline_specs, fn spec ->
-        case String.split(spec, ":", parts: 2) do
-          [^pkg_str] when sub_rule == nil -> true
-          [^pkg_str, "all"] -> true
-          [^pkg_str, ^sub_rule] when sub_rule != nil -> true
-          [^section] -> true
-          ["usage_rules", "all"] when sub_rule != nil -> true
-          _ -> false
-        end
-      end)
-    end
+        postlude =
+          case String.split(rest, "\n<!-- usage-rules-skill-end -->", parts: 2) do
+            [_, post] -> post
+            _ -> ""
+          end
 
-    defp parse_inline_specs(nil), do: []
-
-    defp parse_inline_specs(specs) when is_list(specs), do: Enum.map(specs, &to_string/1)
-
-    defp parse_inline_specs(specs) when is_binary(specs) do
-      specs |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+        String.trim_trailing(prelude <> postlude)
+      else
+        content
+      end
     end
 
     defp strip_spdx_comments(content) do

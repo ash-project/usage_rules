@@ -42,11 +42,11 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       end)
     end
 
-    test "errors on invalid link_style" do
+    test "errors on invalid link option" do
       project_with_deps()
-      |> sync(file: "AGENTS.md", usage_rules: [:foo], link_style: "bad")
+      |> sync(file: "AGENTS.md", usage_rules: [{:foo, link: :bad}])
       |> assert_has_issue(fn issue ->
-        String.contains?(issue, "link_style must be")
+        String.contains?(issue, "link must be :at or :markdown")
       end)
     end
   end
@@ -194,17 +194,15 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
   end
 
-  describe "link_to_folder" do
-    test "generates links to deps folder with markdown style" do
+  describe "per-dep link option" do
+    test "generates links with markdown style" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules"
         })
         |> sync(
           file: "AGENTS.md",
-          usage_rules: [:foo],
-          link_to_folder: "deps",
-          link_style: "markdown"
+          usage_rules: [{:foo, link: :markdown}]
         )
         |> assert_creates("AGENTS.md")
 
@@ -219,9 +217,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(
           file: "AGENTS.md",
-          usage_rules: [:foo],
-          link_to_folder: "deps",
-          link_style: "at"
+          usage_rules: [{:foo, link: :at}]
         )
         |> assert_creates("AGENTS.md")
 
@@ -229,36 +225,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "@deps/foo/usage-rules.md"
     end
 
-    test "creates files in custom folder" do
-      igniter =
-        project_with_deps(%{
-          "deps/foo/usage-rules.md" => "# Foo Rules"
-        })
-        |> sync(
-          file: "AGENTS.md",
-          usage_rules: [:foo],
-          link_to_folder: "rules"
-        )
-        |> assert_creates("rules/foo.md")
-        |> assert_creates("AGENTS.md")
-
-      content = file_content(igniter, "AGENTS.md")
-      assert content =~ "rules/foo.md"
-    end
-
-    test "links to deps folder doesn't copy files" do
-      project_with_deps(%{
-        "deps/foo/usage-rules.md" => "# Foo Rules"
-      })
-      |> sync(
-        file: "AGENTS.md",
-        usage_rules: [:foo],
-        link_to_folder: "deps"
-      )
-      |> assert_creates("AGENTS.md")
-    end
-
-    test "inline overrides force inline even with link_to_folder" do
+    test "mixes inline and linked deps" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules Content",
@@ -266,15 +233,45 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(
           file: "AGENTS.md",
-          usage_rules: [:foo, :bar],
-          link_to_folder: "deps",
-          inline: ["foo"]
+          usage_rules: [:foo, {:bar, link: :markdown}]
         )
         |> assert_creates("AGENTS.md")
 
       content = file_content(igniter, "AGENTS.md")
       assert content =~ "Foo Rules Content"
       assert content =~ "[bar usage rules](deps/bar/usage-rules.md)"
+    end
+
+    test "link option works with sub-rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto Rules"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{"foo:ecto", link: :at}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "@deps/foo/usage-rules/ecto.md"
+    end
+
+    test "link option propagates to all sub-rules with :all" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{"foo:all", link: :markdown}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "[foo:ecto usage rules](deps/foo/usage-rules/ecto.md)"
+      assert content =~ "[foo:testing usage rules](deps/foo/usage-rules/testing.md)"
     end
   end
 
@@ -311,7 +308,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "More old stuff"
     end
 
-    test "start marker without end marker preserves prelude when switching to skills only" do
+    test "start marker without end marker preserves prelude on re-sync" do
       igniter =
         project_with_deps(%{
           "AGENTS.md" =>
@@ -320,8 +317,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(
           file: "AGENTS.md",
-          usage_rules: [:foo],
-          link_to_folder: "deps"
+          usage_rules: [:foo]
         )
 
       content = file_content(igniter, "AGENTS.md")
@@ -511,6 +507,51 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "Expert guidance for using Foo in production."
     end
 
+    test "preserves custom content in skill on re-sync" do
+      existing_skill =
+        "---\nname: use-foo\ndescription: \"old\"\nmetadata:\n  managed-by: usage-rules\n---\n\nMy custom instructions\n\n<!-- usage-rules-skill-start -->\nOld body\n<!-- usage-rules-skill-end -->"
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage\n\nUpdated content.",
+          ".claude/skills/use-foo/SKILL.md" => existing_skill
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [:foo]]
+            ]
+          ]
+        )
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "My custom instructions"
+      assert content =~ "Updated content."
+      assert content =~ "<!-- usage-rules-skill-start -->"
+      refute content =~ "Old body"
+    end
+
+    test "skill includes managed section markers" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [:foo]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "<!-- usage-rules-skill-start -->"
+      assert content =~ "<!-- usage-rules-skill-end -->"
+    end
+
     test "builds multiple skills" do
       project_with_deps(%{
         "deps/foo/usage-rules.md" => "# Foo Rules",
@@ -555,7 +596,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
 
     test "removes stale managed skills no longer in build list" do
-      stale_skill_md = "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\nOld skill."
+      stale_skill_md =
+        "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\nOld skill.\n<!-- usage-rules-skill-end -->"
 
       igniter =
         project_with_deps(%{
@@ -573,12 +615,41 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         |> assert_creates("skills/use-foo/SKILL.md")
 
       # The stale skill should have been removed
-      assert ".claude/skills/use-old/SKILL.md" not in Map.keys(igniter.rewrite.sources)
+      assert "skills/use-old/SKILL.md" not in Map.keys(igniter.rewrite.sources)
+    end
+
+    test "preserves stale skill with custom content" do
+      stale_skill_md =
+        "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\n\nMy custom notes\n\n<!-- usage-rules-skill-start -->\nOld skill.\n<!-- usage-rules-skill-end -->"
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "skills/use-old/SKILL.md" => stale_skill_md
+        })
+        |> sync(
+          skills: [
+            location: "skills",
+            build: [
+              "use-foo": [usage_rules: [:foo]]
+            ]
+          ]
+        )
+        |> assert_creates("skills/use-foo/SKILL.md")
+
+      # The stale skill should be kept with custom content preserved
+      assert Map.has_key?(igniter.rewrite.sources, "skills/use-old/SKILL.md")
+      content = file_content(igniter, "skills/use-old/SKILL.md")
+      assert content =~ "My custom notes"
+      refute content =~ "usage-rules-skill-start"
+      refute content =~ "managed-by: usage-rules"
     end
 
     test "does not remove non-managed skills" do
       unmanaged_skill_md = "---\nname: custom-skill\n---\nCustom skill."
-      managed_skill_md = "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\nOld."
+
+      managed_skill_md =
+        "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\nOld.\n<!-- usage-rules-skill-end -->"
 
       igniter =
         project_with_deps(%{
@@ -705,8 +776,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
             build: [
               "use-bar": [usage_rules: [:bar]]
             ]
-          ],
-          link_to_folder: "deps"
+          ]
         )
         |> assert_creates("AGENTS.md")
         |> assert_creates(".claude/skills/use-bar/SKILL.md")

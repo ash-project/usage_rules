@@ -63,9 +63,7 @@ if Code.ensure_loaded?(Igniter) do
           defp usage_rules do
             [
               file: "AGENTS.md",
-              usage_rules: :all,
-              link_to_folder: "deps",
-              link_style: "markdown"
+              usage_rules: :all
             ]
           end
 
