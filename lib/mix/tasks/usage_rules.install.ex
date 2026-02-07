@@ -52,7 +52,7 @@ if Code.ensure_loaded?(Igniter) do
       |> Igniter.add_notice("""
       UsageRules: Manage your AGENTS.md file and agent skills from dependencies.
 
-      Add configuration to your mix.exs project/0:
+      Add configuration to your mix.exs project/0.:
 
           def project do
             [
@@ -61,9 +61,34 @@ if Code.ensure_loaded?(Igniter) do
           end
 
           defp usage_rules do
+            # Example for those using claude.
             [
-              file: "AGENTS.md",
-              usage_rules: :all
+              file: "CLAUDE.md",
+              # rules to include directly in CLAUDE.md
+              usage_rules: ["usage_rules:all"],
+              skills: [
+                location: ".claude/skills",
+                # build skills that combine multiple usage rules
+                build: [
+                  "ash-framework": [
+                    # The description tells people how to use this skill.
+                    description: \"""
+                    Use this skill working with Ash Framework or any of its extensions. 
+                    Always consult this when making any domain changes, features or fixes.
+                    \""",
+                    # Include all Ash dependencies
+                    usage_rules: [:ash, ~r/^ash_/]
+                  ],
+                  "phoenix-framework": [
+                    description: \"""
+                    Use this skill working with Phoenix Framework.
+                    Consult this when working with the web layer, controllers, views, liveviews etc.
+                    \""",
+                    # Include all Phoenix dependencies
+                    usage_rules: [:phoenix, ~r/^phoenix_/]
+                  ]
+                ]
+              ]
             ]
           end
 
