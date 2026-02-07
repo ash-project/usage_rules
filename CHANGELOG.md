@@ -12,6 +12,13 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.0-rc.0 (2026-02-07)
+### Breaking Changes:
+
+* rebuild usage rules to be config-driven and support agent skills by Zach Daniel
+
+
+
 ## v0.1.26 (2025-11-05)
 
 
