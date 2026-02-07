@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.0-rc.2 (2026-02-07)
+
+
+
+
+### Improvements:
+
+* reference mode for skill deps by Zach Daniel
+
 ## v1.0.0-rc.1 (2026-02-07)
 
 
