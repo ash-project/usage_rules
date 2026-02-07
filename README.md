@@ -122,21 +122,17 @@ defp usage_rules do
       deps: [:ash, :req],
       # Supports regex for matching multiple deps:
       # deps: [~r/^ash_/],
+      # Use {:dep, :reference} to build as reference files instead of inlining:
+      # deps: [:ash, {:req, :reference}, {~r/^ash_/, :reference}],
 
       # Compose custom skills from multiple packages
       build: [
-        "ash-expert": [
+        "ash-framework": [
           description: "Expert on the Ash Framework ecosystem.",
-          usage_rules: [:ash, :ash_postgres, :ash_phoenix]
+          # Use {:dep, :reference} or {~r/.../, :reference} for reference files
+          usage_rules: [:ash, {:ash_postgres, :reference}, {~r/^ash_phoenix/, :reference}]
         ]
       ]
-      # build also supports regex in usage_rules:
-      # build: [
-      #   "ash-expert": [
-      #     description: "Expert on Ash.",
-      #     usage_rules: [:ash, ~r/^ash_/]
-      #   ]
-      # ]
     ]
   ]
 end
@@ -168,7 +164,7 @@ Each entry in the `usage_rules` list can be:
 | Option | Type | Description |
 |--------|------|-------------|
 | `location` | `string` | Output directory for skills (default: `".claude/skills"`) |
-| `deps` | `list` | Auto-build a `use-<pkg>` skill per listed dependency. Supports atoms and regexes |
+| `deps` | `list` | Auto-build a `use-<pkg>` skill per listed dependency. Supports atoms, regexes, and `{spec, :reference}` tuples |
 | `build` | `keyword` | Define custom composed skills from multiple packages' usage rules |
 
 ## Usage Rules
@@ -263,6 +259,14 @@ end
 
 This generates `.claude/skills/use-ash/SKILL.md` and `.claude/skills/use-req/SKILL.md`, each containing the package's usage rules, available mix tasks, doc search commands, and sub-rule references.
 
+You can mark deps as `:reference` to have their main rules written as a separate reference file instead of being inlined into the skill body:
+
+```elixir
+skills: [
+  deps: [{:ash, :reference}, {~r/^ash_/, :reference}]
+]
+```
+
 ### Compose custom skills
 
 The `build` option lets you compose a single skill from multiple packages:
@@ -270,7 +274,7 @@ The `build` option lets you compose a single skill from multiple packages:
 ```elixir
 skills: [
   build: [
-    "ash-expert": [
+    "ash-framework": [
       description: "Expert on the Ash Framework ecosystem.",
       usage_rules: [:ash, :ash_postgres, :ash_phoenix, :ash_json_api]
     ]
@@ -278,18 +282,36 @@ skills: [
 ]
 ```
 
-This generates a single `.claude/skills/ash-expert/SKILL.md` that combines usage rules from all listed packages. Regex is also supported:
+This generates a single `.claude/skills/ash-framework/SKILL.md` that combines usage rules from all listed packages. Regex is also supported:
 
 ```elixir
 skills: [
   build: [
-    "ash-expert": [
+    "ash-framework": [
       description: "Expert on Ash.",
       usage_rules: [:ash, ~r/^ash_/]
     ]
   ]
 ]
 ```
+
+### Reference mode
+
+By default, each package's main `usage-rules.md` is inlined directly into the skill body. For skills that combine many packages, this can make the SKILL.md quite large. You can use `{:dep, :reference}` or `{~r/.../, :reference}` to have packages built as separate reference files instead:
+
+```elixir
+skills: [
+  build: [
+    "ash-framework": [
+      description: "Expert on the Ash Framework ecosystem.",
+      # Ash core rules are inlined, extensions are reference files
+      usage_rules: [:ash, {~r/^ash_/, :reference}]
+    ]
+  ]
+]
+```
+
+This inlines `:ash`'s rules into the skill body and writes each matching extension's rules to `references/<package>.md`, linked from the "Additional References" section — the same way sub-rules are handled. This works in both `deps` and `build` configs, and with both atoms and regexes.
 
 ### Stale skill cleanup
 

@@ -29,33 +29,7 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
     Add to your `mix.exs` project config:
 
     ```elixir
-    def project do
-      [
-        usage_rules: usage_rules()
-      ]
-    end
-
-    defp usage_rules do
-      [
-        file: "AGENTS.md",
-        usage_rules: [
-          :ash,                          # main usage-rules.md (inlined)
-          "phoenix:ecto",                # specific sub-rule (inlined)
-          {:req, link: :at},             # linked with @-style
-        ],
-        # or: usage_rules: :all
-        skills: [
-          location: ".claude/skills",    # where to output skills
-          deps: [:ash, :req],             # auto-build a "use-<pkg>" skill per dep
-          build: [                       # compose custom skills from multiple packages
-            "ash-expert": [
-              description: "Expert on the Ash Framework ecosystem.",
-              usage_rules: [:ash, :ash_postgres, :ash_json_api]
-            ]
-          ]
-        ]
-      ]
-    end
+    #{code_sample()}
     ```
 
     Then run:
@@ -66,6 +40,51 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
     The config is the source of truth — packages present in the file but absent
     from config are automatically removed on each sync.
     """
+  end
+
+  def code_sample(spaces \\ 0) do
+    """
+    def project do
+      [
+        ...
+        usage_rules: usage_rules()
+      ]
+    end
+
+    defp usage_rules do
+      # Example for those using claude.
+      [
+        file: "CLAUDE.md",
+        # rules to include directly in CLAUDE.md
+        usage_rules: ["usage_rules:all"],
+        skills: [
+          location: ".claude/skills",
+          # build skills that combine multiple usage rules
+          build: [
+            "ash-framework": [
+              # The description tells people how to use this skill.
+              description: \"""
+              Use this skill working with Ash Framework or any of its extensions. 
+              Always consult this when making any domain changes, features or fixes.
+              \""",
+              # Include all Ash dependencies
+              usage_rules: [:ash, ~r/^ash_/]
+            ],
+            "phoenix-framework": [
+              description: \"""
+              Use this skill working with Phoenix Framework.
+              Consult this when working with the web layer, controllers, views, liveviews etc.
+              \""",
+              # Include all Phoenix dependencies
+              usage_rules: [:phoenix, ~r/^phoenix_/]
+            ]
+          ]
+        ]
+      ]
+    end
+    """
+    |> String.split("\n")
+    |> Enum.map_join("\n", &String.pad_leading(&1, String.length(&1) + spaces))
   end
 end
 
@@ -87,18 +106,7 @@ if Code.ensure_loaded?(Igniter) do
 
         Configuration is now done in your `mix.exs` project config:
 
-            def project do
-              [
-                usage_rules: usage_rules()
-              ]
-            end
-
-            defp usage_rules do
-              [
-                file: "AGENTS.md",
-                usage_rules: :all
-              ]
-            end
+        #{__MODULE__.Docs.code_sample(4)}
 
         Then simply run: mix usage_rules.sync
 
@@ -170,18 +178,7 @@ if Code.ensure_loaded?(Igniter) do
            """
            No usage_rules config found. Add to your mix.exs project config:
 
-               def project do
-                 [
-                   usage_rules: usage_rules()
-                 ]
-               end
-
-               defp usage_rules do
-                 [
-                   file: "AGENTS.md",
-                   usage_rules: [:ash, :phoenix]
-                 ]
-               end
+           #{__MODULE__.Docs.code_sample(4)}
            """}
 
         (link_error = validate_link_options(config[:usage_rules])) != nil ->
@@ -255,11 +252,12 @@ if Code.ensure_loaded?(Igniter) do
       package_build_specs =
         (skills_config[:deps] || [])
         |> expand_dep_specs(all_deps)
-        |> Enum.filter(fn {_name, path} ->
+        |> Enum.filter(fn {_name, path, _mode} ->
           Igniter.exists?(igniter, Path.join(path, "usage-rules.md"))
         end)
-        |> Enum.map(fn {pkg_name, _path} ->
-          {:"use-#{pkg_name}", [usage_rules: [pkg_name]]}
+        |> Enum.map(fn {pkg_name, _path, mode} ->
+          spec = if mode == :reference, do: {pkg_name, :reference}, else: pkg_name
+          {:"use-#{pkg_name}", [usage_rules: [spec]]}
         end)
 
       # Merge explicit build specs on top of package-derived ones
@@ -735,8 +733,29 @@ if Code.ensure_loaded?(Igniter) do
           end
         )
 
-      # Reference files for sub-rules from all packages
-      Enum.reduce(resolved_packages, igniter, fn {_pkg_name, package_path}, acc ->
+      # Reference files for sub-rules and reference-mode main rules from all packages
+      Enum.reduce(resolved_packages, igniter, fn {pkg_name, package_path, mode}, acc ->
+        # Create reference file for main usage-rules.md if this package is in reference mode
+        acc =
+          if mode == :reference do
+            main_path = Path.join(package_path, "usage-rules.md")
+            content = read_dep_content(acc, main_path)
+            ref_path = Path.join([skill_dir, "references", "#{pkg_name}.md"])
+
+            if content != "" do
+              Igniter.create_or_update_file(
+                acc,
+                ref_path,
+                content,
+                fn source -> Rewrite.Source.update(source, :content, content) end
+              )
+            else
+              acc
+            end
+          else
+            acc
+          end
+
         sub_rules = find_available_sub_rules(acc, package_path)
 
         Enum.reduce(sub_rules, acc, fn sub_rule, inner_acc ->
@@ -770,7 +789,8 @@ if Code.ensure_loaded?(Igniter) do
 
       body = build_skill_body(igniter, skill_name, resolved_packages)
 
-      frontmatter <> "\n\n" <>
+      frontmatter <>
+        "\n\n" <>
         "<!-- usage-rules-skill-start -->\n" <>
         body <>
         "\n<!-- usage-rules-skill-end -->"
@@ -797,32 +817,46 @@ if Code.ensure_loaded?(Igniter) do
 
       # Sub-rules as references (at the top for discoverability)
       all_sub_rules =
-        Enum.flat_map(resolved_packages, fn {_pkg_name, package_path} ->
+        Enum.flat_map(resolved_packages, fn {_pkg_name, package_path, _mode} ->
           find_available_sub_rules(igniter, package_path)
         end)
 
-      sections =
-        if Enum.any?(all_sub_rules) do
-          ref_lines =
-            Enum.map_join(all_sub_rules, "\n", fn sub_rule ->
-              "- [#{sub_rule}](references/#{sub_rule}.md)"
-            end)
+      # Main rules from reference-mode packages
+      reference_main_rules =
+        resolved_packages
+        |> Enum.filter(fn {_pkg_name, _path, mode} -> mode == :reference end)
+        |> Enum.map(fn {pkg_name, _path, _mode} -> pkg_name end)
 
+      all_references =
+        Enum.map(all_sub_rules, fn sub_rule ->
+          "- [#{sub_rule}](references/#{sub_rule}.md)"
+        end) ++
+          Enum.map(reference_main_rules, fn pkg_name ->
+            "- [#{pkg_name}](references/#{pkg_name}.md)"
+          end)
+
+      sections =
+        if Enum.any?(all_references) do
+          ref_lines = Enum.join(all_references, "\n")
           sections ++ ["## Additional References\n\n#{ref_lines}"]
         else
           sections
         end
 
-      # Usage rules content from all packages
+      # Usage rules content from inline packages only
       sections =
-        Enum.reduce(resolved_packages, sections, fn {pkg_name, package_path}, acc ->
-          main_path = Path.join(package_path, "usage-rules.md")
-          content = read_dep_content(igniter, main_path)
-
-          if content != "" do
-            acc ++ ["## #{pkg_name} usage rules\n\n#{content}"]
-          else
+        Enum.reduce(resolved_packages, sections, fn {pkg_name, package_path, mode}, acc ->
+          if mode == :reference do
             acc
+          else
+            main_path = Path.join(package_path, "usage-rules.md")
+            content = read_dep_content(igniter, main_path)
+
+            if content != "" do
+              acc ++ ["## #{pkg_name} usage rules\n\n#{content}"]
+            else
+              acc
+            end
           end
         end)
 
@@ -846,7 +880,7 @@ if Code.ensure_loaded?(Igniter) do
 
       # Mix tasks from all packages (at the bottom)
       all_mix_tasks =
-        Enum.flat_map(resolved_packages, fn {pkg_name, _path} ->
+        Enum.flat_map(resolved_packages, fn {pkg_name, _path, _mode} ->
           discover_mix_tasks(pkg_name)
           |> Enum.map(fn {task, doc} -> {pkg_name, task, doc} end)
         end)
@@ -908,15 +942,28 @@ if Code.ensure_loaded?(Igniter) do
 
     defp expand_dep_specs(specs, all_deps) do
       Enum.flat_map(specs, fn
+        {%Regex{} = regex, :reference} ->
+          Enum.filter(all_deps, fn {name, _path} ->
+            Regex.match?(regex, to_string(name))
+          end)
+          |> Enum.map(fn {name, path} -> {name, path, :reference} end)
+
+        {pkg_name, :reference} when is_atom(pkg_name) ->
+          case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
+            nil -> []
+            {name, path} -> [{name, path, :reference}]
+          end
+
         %Regex{} = regex ->
           Enum.filter(all_deps, fn {name, _path} ->
             Regex.match?(regex, to_string(name))
           end)
+          |> Enum.map(fn {name, path} -> {name, path, :inline} end)
 
         pkg_name when is_atom(pkg_name) ->
           case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
             nil -> []
-            dep -> [dep]
+            {name, path} -> [{name, path, :inline}]
           end
       end)
       |> Enum.uniq_by(&elem(&1, 0))

@@ -800,4 +800,140 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       |> assert_creates(".claude/skills/use-foo/SKILL.md")
     end
   end
+
+  describe "reference mode in skills" do
+    test "build with {:dep, :reference} creates reference file instead of inlining" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo guidance.",
+          "deps/bar/usage-rules.md" => "# Bar Rules\n\nBar guidance."
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/bar.md")
+
+      skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      # Foo should be inlined
+      assert skill_content =~ "Foo Rules"
+      assert skill_content =~ "Foo guidance."
+      # Bar should be a reference link, not inlined
+      assert skill_content =~ "[bar](references/bar.md)"
+      refute skill_content =~ "Bar guidance."
+
+      ref_content = file_content(igniter, ".claude/skills/my-skill/references/bar.md")
+      assert ref_content =~ "Bar Rules"
+      assert ref_content =~ "Bar guidance."
+    end
+
+    test "build with {~r/.../, :reference} creates reference files for matching deps" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+          "deps/ash_json_api/usage-rules.md" => "# Ash JSON API"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "ash-expert": [usage_rules: [:ash, {~r/^ash_/, :reference}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/ash-expert/SKILL.md")
+        |> assert_creates(".claude/skills/ash-expert/references/ash_postgres.md")
+        |> assert_creates(".claude/skills/ash-expert/references/ash_json_api.md")
+
+      skill_content = file_content(igniter, ".claude/skills/ash-expert/SKILL.md")
+      # Ash core should be inlined
+      assert skill_content =~ "Ash Core"
+      # Ash extensions should be references
+      assert skill_content =~ "[ash_postgres](references/ash_postgres.md)"
+      assert skill_content =~ "[ash_json_api](references/ash_json_api.md)"
+      refute skill_content =~ "Ash Postgres"
+      refute skill_content =~ "Ash JSON API"
+    end
+
+    test "deps config with {:dep, :reference} creates reference-mode skill" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo content."
+        })
+        |> sync(skills: [location: ".claude/skills", deps: [{:foo, :reference}]])
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+
+      skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert skill_content =~ "[foo](references/foo.md)"
+      refute skill_content =~ "Foo content."
+
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      assert ref_content =~ "Foo Rules"
+    end
+
+    test "deps config with {~r/.../, :reference} creates reference-mode skills" do
+      project_with_deps(%{
+        "deps/ash_postgres/usage-rules.md" => "# Ash Postgres Rules",
+        "deps/ash_json_api/usage-rules.md" => "# Ash JSON API Rules"
+      })
+      |> sync(skills: [location: ".claude/skills", deps: [{~r/^ash_/, :reference}]])
+      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash_postgres/references/ash_postgres.md")
+      |> assert_creates(".claude/skills/use-ash_json_api/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash_json_api/references/ash_json_api.md")
+    end
+
+    test "reference packages still appear in search docs and mix tasks sections" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "deps/bar/usage-rules.md" => "# Bar Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+
+      skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert skill_content =~ "-p foo"
+      assert skill_content =~ "-p bar"
+    end
+
+    test "reference and sub-rules both appear in Additional References" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing",
+          "deps/bar/usage-rules.md" => "# Bar Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/testing.md")
+        |> assert_creates(".claude/skills/my-skill/references/bar.md")
+
+      skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert skill_content =~ "Additional References"
+      assert skill_content =~ "[testing](references/testing.md)"
+      assert skill_content =~ "[bar](references/bar.md)"
+    end
+  end
 end
