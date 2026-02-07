@@ -4,6 +4,6 @@
 
 defmodule UsageRules do
   @moduledoc """
-  Tools for gathering usage rules from dependencies for projects.
+  Config-driven tool for managing AGENTS.md files and agent skills from Elixir dependencies.
   """
 end

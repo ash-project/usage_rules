@@ -15,9 +15,9 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
   current mix project, defaults to the latest version.
   ## Search documentation for all dependencies in the current mix project
       $ mix usage_rules.search_docs "search term"
-  ## Search documentation for specific packages 
+  ## Search documentation for specific packages
       $ mix usage_rules.search_docs "search term" -p ecto -p ash
-  ## Search documentation for specific versions 
+  ## Search documentation for specific versions
       $ mix usage_rules.search_docs "search term" -p ecto@3.13.2 -p ash@3.5.26
   ## Control output format and pagination
       $ mix usage_rules.search_docs "search term" --output json --page 2 --per-page 20
@@ -225,8 +225,8 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
     result = """
     ## #{global_index}. #{title_display}
 
-    **Package:** #{package}  
-    **Type:** #{type}  
+    **Package:** #{package}
+    **Type:** #{type}
     **Reference:** #{ref}
 
     """
@@ -435,7 +435,7 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
   defp raise_bad_args! do
     Mix.raise("""
     Must provide a search term. For example:
-        $ mix hex.docs.search "search term"
+        $ mix usage_rules.search_docs "search term"
     """)
   end
 end

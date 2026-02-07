@@ -50,23 +50,30 @@ if Code.ensure_loaded?(Igniter) do
     def igniter(igniter) do
       igniter
       |> Igniter.add_notice("""
-      Usage Rules: Sync usage rules for the packages you use.
+      UsageRules: Manage your AGENTS.md file and agent skills from dependencies.
 
-      Suggested starting point to sync all usage rules:
+      Add configuration to your mix.exs project/0:
 
-          mix usage_rules.sync AGENTS.md --all \\
-            --inline usage_rules:all \\
-            --link-to-folder deps
+          def project do
+            [
+              usage_rules: usage_rules()
+            ]
+          end
 
-      Or sync only a specific set, copying their rules to a
-      specific folder
+          defp usage_rules do
+            [
+              file: "AGENTS.md",
+              usage_rules: :all,
+              link_to_folder: "deps",
+              link_style: "markdown"
+            ]
+          end
 
-          mix usage_rules.sync AGENTS.md \\
-            ash ash_postgres \\
-            --link-to-folder rules
+      Then run:
 
+          mix usage_rules.sync
 
-      For more info and examples: `mix help usage_rules.sync`
+      For more info: `mix help usage_rules.sync`
       """)
     end
 

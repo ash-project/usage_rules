@@ -5,9 +5,9 @@
 defmodule UsageRules.MixProject do
   use Mix.Project
 
-  @version "0.1.26"
+  @version "0.2.0"
   @description """
-  A dev tool for Elixir projects to gather LLM usage rules from dependencies
+  A config-driven dev tool for Elixir projects to manage AGENTS.md files and agent skills from dependencies
   """
 
   @source_url "https://github.com/ash-project/usage_rules"
@@ -36,16 +36,14 @@ defmodule UsageRules.MixProject do
         "Zach Daniel <zach@zachdaniel.dev>"
       ],
       licenses: ["MIT"],
-      maintainers: "Zach Daniel",
       files:
         ~w(lib .formatter.exs mix.exs README* LICENSE* CHANGELOG* usage-rules usage-rules.md),
       links: %{
-        "GitHub" => "https://github.com/ash-project/usage_rules",
-        "Changelog" => "https://github.com/ash-project/usage_rules/blob/main/CHANGELOG.md",
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
         "Discord" => "https://discord.gg/HTHRaaVPUc",
         "Website" => "https://ash-hq.org",
-        "Forum" => "https://elixirforum.com/c/elixir-framework-forums/ash-framework-forum",
-        "REUSE Compliance" => "https://api.reuse.software/info/github.com/ash-project/usage_rules"
+        "Forum" => "https://elixirforum.com/c/elixir-framework-forums/ash-framework-forum"
       }
     ]
   end
