@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.0-rc.1 (2026-02-07)
+
+
+
+
+### Improvements:
+
+* make package inlining configured per-dep, clean ups by Zach Daniel
+
 ## v1.0.0-rc.0 (2026-02-07)
 ### Breaking Changes:
 
