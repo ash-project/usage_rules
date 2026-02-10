@@ -600,6 +600,33 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "Expert guidance for using Foo in production."
     end
 
+    test "uses YAML block scalar for multiline description" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [
+                usage_rules: [:foo],
+                description: """
+                Use this skill working with Foo.
+                Always consult this when making changes.
+                """
+              ]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "description: >-\n"
+      assert content =~ "  Use this skill working with Foo."
+      assert content =~ "  Always consult this when making changes."
+    end
+
     test "preserves custom content in skill on re-sync" do
       existing_skill =
         "---\nname: use-foo\ndescription: \"old\"\nmetadata:\n  managed-by: usage-rules\n---\n\nMy custom instructions\n\n<!-- usage-rules-skill-start -->\nOld body\n<!-- usage-rules-skill-end -->"

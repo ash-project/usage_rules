@@ -815,11 +815,13 @@ if Code.ensure_loaded?(Igniter) do
     defp build_skill_md(igniter, skill_name, resolved_packages, custom_description) do
       description = custom_description || build_skill_description(skill_name, resolved_packages)
 
+      formatted_description = format_yaml_string(description)
+
       frontmatter =
         """
         ---
         name: #{skill_name}
-        description: "#{escape_yaml(description)}"
+        description: #{formatted_description}
         metadata:
           managed-by: #{@managed_by_marker}
         ---
@@ -1112,6 +1114,26 @@ if Code.ensure_loaded?(Igniter) do
 
     defp strip_spdx_comments(content) do
       String.replace(content, ~r/\A\s*<!--\s*\n(?:.*?SPDX-.*?\n)*.*?-->\s*\n*/s, "")
+    end
+
+    defp format_yaml_string(str) do
+      str = String.trim(str)
+
+      if String.contains?(str, "\n") do
+        indent = "  "
+
+        lines =
+          str
+          |> String.split("\n")
+          |> Enum.map_join("\n", fn line ->
+            trimmed = String.trim(line)
+            if trimmed == "", do: "", else: indent <> trimmed
+          end)
+
+        ">-\n" <> lines
+      else
+        "\"" <> escape_yaml(str) <> "\""
+      end
     end
 
     defp escape_yaml(str) do
