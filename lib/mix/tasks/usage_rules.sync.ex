@@ -56,7 +56,11 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
       [
         file: "CLAUDE.md",
         # rules to include directly in CLAUDE.md
-        usage_rules: ["usage_rules:all"],
+        # use a regex to match multiple deps, or atoms/strings for specific ones
+        usage_rules: [:ash, ~r/^ash_/],
+        # If your CLAUDE.md is getting too big, link instead of inlining:
+        usage_rules: [:ash, {~r/^ash_/, link: :markdown}],
+        # or use skills
         skills: [
           location: ".claude/skills",
           # build skills that combine multiple usage rules
@@ -364,61 +368,106 @@ if Code.ensure_loaded?(Igniter) do
     defp resolve_usage_rules(igniter, all_deps, specs) when is_list(specs) do
       {rules, errors} =
         Enum.reduce(specs, {[], []}, fn spec, {rules_acc, errors_acc} ->
-          {package_name, sub_rule, opts} = parse_spec(spec)
-
-          case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
-            {_name, package_path} ->
-              case sub_rule do
-                "all" ->
-                  found =
-                    find_available_sub_rules(igniter, package_path)
-                    |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
-
-                  if Enum.any?(found) do
-                    {rules_acc ++ found, errors_acc}
-                  else
-                    {rules_acc,
-                     errors_acc ++
-                       [
-                         "Package :#{package_name} is a dependency but has no sub-rules in usage-rules/"
-                       ]}
-                  end
-
-                nil ->
-                  if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
-                    {rules_acc ++ [{package_name, package_path, nil, opts}], errors_acc}
-                  else
-                    {rules_acc,
-                     errors_acc ++
-                       [
-                         "Package :#{package_name} is a dependency but does not have a usage-rules.md file"
-                       ]}
-                  end
-
-                sub_rule_name ->
-                  sub_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
-
-                  if Igniter.exists?(igniter, sub_path) do
-                    {rules_acc ++ [{package_name, package_path, sub_rule_name, opts}], errors_acc}
-                  else
-                    {rules_acc,
-                     errors_acc ++
-                       [
-                         "Package :#{package_name} does not have a usage-rules/#{sub_rule_name}.md file"
-                       ]}
-                  end
-              end
+          case extract_regex_spec(spec) do
+            {%Regex{} = regex, opts} ->
+              resolve_regex_usage_rules(igniter, all_deps, regex, opts, rules_acc, errors_acc)
 
             nil ->
-              {rules_acc,
-               errors_acc ++
-                 [
-                   "Package :#{package_name} is listed in usage_rules but is not a dependency of this project"
-                 ]}
+              {package_name, sub_rule, opts} = parse_spec(spec)
+
+              resolve_named_usage_rules(
+                igniter,
+                all_deps,
+                package_name,
+                sub_rule,
+                opts,
+                rules_acc,
+                errors_acc
+              )
           end
         end)
 
       {rules, errors}
+    end
+
+    defp extract_regex_spec(%Regex{} = regex), do: {regex, []}
+    defp extract_regex_spec({%Regex{} = regex, opts}) when is_list(opts), do: {regex, opts}
+    defp extract_regex_spec(_), do: nil
+
+    defp resolve_regex_usage_rules(igniter, all_deps, regex, opts, rules_acc, errors_acc) do
+      found =
+        all_deps
+        |> Enum.filter(fn {name, _path} -> Regex.match?(regex, to_string(name)) end)
+        |> Enum.flat_map(fn {package_name, package_path} ->
+          if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+            [{package_name, package_path, nil, opts}]
+          else
+            []
+          end
+        end)
+
+      {rules_acc ++ found, errors_acc}
+    end
+
+    defp resolve_named_usage_rules(
+           igniter,
+           all_deps,
+           package_name,
+           sub_rule,
+           opts,
+           rules_acc,
+           errors_acc
+         ) do
+      case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
+        {_name, package_path} ->
+          case sub_rule do
+            "all" ->
+              found =
+                find_available_sub_rules(igniter, package_path)
+                |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
+
+              if Enum.any?(found) do
+                {rules_acc ++ found, errors_acc}
+              else
+                {rules_acc,
+                 errors_acc ++
+                   [
+                     "Package :#{package_name} is a dependency but has no sub-rules in usage-rules/"
+                   ]}
+              end
+
+            nil ->
+              if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+                {rules_acc ++ [{package_name, package_path, nil, opts}], errors_acc}
+              else
+                {rules_acc,
+                 errors_acc ++
+                   [
+                     "Package :#{package_name} is a dependency but does not have a usage-rules.md file"
+                   ]}
+              end
+
+            sub_rule_name ->
+              sub_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
+
+              if Igniter.exists?(igniter, sub_path) do
+                {rules_acc ++ [{package_name, package_path, sub_rule_name, opts}], errors_acc}
+              else
+                {rules_acc,
+                 errors_acc ++
+                   [
+                     "Package :#{package_name} does not have a usage-rules/#{sub_rule_name}.md file"
+                   ]}
+              end
+          end
+
+        nil ->
+          {rules_acc,
+           errors_acc ++
+             [
+               "Package :#{package_name} is listed in usage_rules but is not a dependency of this project"
+             ]}
+      end
     end
 
     @builtin_aliases %{

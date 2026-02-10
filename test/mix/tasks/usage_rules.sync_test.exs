@@ -194,6 +194,88 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
   end
 
+  describe "regex in usage_rules" do
+    test "matches multiple dependencies by regex" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+          "deps/ash_json_api/usage-rules.md" => "# Ash JSON API",
+          "deps/req/usage-rules.md" => "# Req Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [~r/^ash/])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Core"
+      assert content =~ "Ash Postgres"
+      assert content =~ "Ash JSON API"
+      refute content =~ "Req Rules"
+    end
+
+    test "regex with link option" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+          "deps/req/usage-rules.md" => "# Req Rules"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{~r/^ash/, link: :markdown}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "[ash usage rules](deps/ash/usage-rules.md)"
+      assert content =~ "[ash_postgres usage rules](deps/ash_postgres/usage-rules.md)"
+      refute content =~ "Req"
+    end
+
+    test "regex skips deps without usage-rules.md" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+          "deps/ash_no_rules/mix.exs" => "defmodule AshNoRules.MixProject, do: nil"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [~r/^ash_/])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Postgres"
+      refute content =~ "ash_no_rules"
+    end
+
+    test "regex and atoms can be mixed" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+          "deps/req/usage-rules.md" => "# Req Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [~r/^ash_/, :req])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Postgres"
+      assert content =~ "Req Rules"
+    end
+
+    test "regex with link: :at" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{~r/^ash_/, link: :at}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "@deps/ash_postgres/usage-rules.md"
+    end
+  end
+
   describe "per-dep link option" do
     test "generates links with markdown style" do
       igniter =

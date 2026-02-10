@@ -57,7 +57,11 @@ defp usage_rules do
   [
     file: "CLAUDE.md",
     # rules to include directly in CLAUDE.md
-    usage_rules: ["usage_rules:all"],
+    # use a regex to match multiple deps, or atoms/strings for specific ones
+    usage_rules: [:ash, ~r/^ash_/],
+    # If your CLAUDE.md is getting too big, link instead of inlining:
+    usage_rules: [:ash, {~r/^ash_/, link: :markdown}],
+    # or use skills
     skills: [
       location: ".claude/skills",
       # build skills that combine multiple usage rules
@@ -107,9 +111,11 @@ defp usage_rules do
     # Or list specific packages and sub-rules:
     # usage_rules: [
     #   :ash,                         # inlined (default)
+    #   ~r/^ash_/,                    # regex match (inlined)
     #   "phoenix:ecto",               # specific sub-rule (inlined)
     #   {:req, link: :at},            # linked with @-style
     #   {:ecto, link: :markdown},     # linked with markdown-style
+    #   {~r/^phoenix_/, link: :markdown}, # regex match (linked)
     #   :elixir,                      # built-in Elixir rules
     #   :otp,                         # built-in OTP rules
     # ],
@@ -152,8 +158,10 @@ Each entry in the `usage_rules` list can be:
 | `:package` | Inline the package's usage rules (default) |
 | `"package:sub_rule"` | Inline a specific sub-rule |
 | `"package:all"` | Inline all sub-rules from a package |
+| `~r/pattern/` | Inline all matching dependencies' usage rules |
 | `{:package, link: :at}` | Link with `@deps/package/usage-rules.md` style |
 | `{:package, link: :markdown}` | Link with `[name](deps/package/usage-rules.md)` style |
+| `{~r/pattern/, link: :markdown}` | Link all matching dependencies with markdown-style |
 | `{"package:sub_rule", link: :at}` | Link a specific sub-rule with @-style |
 
 ### Skills options
@@ -213,6 +221,23 @@ UsageRules ships with built-in rules for Elixir and OTP:
 ```elixir
 usage_rules: [:elixir, :otp, :ash, :phoenix]
 ```
+
+### Matching by regex
+
+Use a regex to match multiple dependencies at once:
+
+```elixir
+defp usage_rules do
+  [
+    file: "AGENTS.md",
+    usage_rules: [:ash, ~r/^ash_/]
+    # If your AGENTS.md is getting too big, link instead of inlining:
+    # usage_rules: [:ash, {~r/^ash_/, link: :markdown}]
+  ]
+end
+```
+
+This matches all dependencies whose name matches the regex and inlines their `usage-rules.md`. Dependencies without a `usage-rules.md` are silently skipped.
 
 ### Linking instead of inlining
 
