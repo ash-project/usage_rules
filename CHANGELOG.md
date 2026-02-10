@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.1 (2026-02-10)
+
+
+
+
+### Improvements:
+
+* regexes in usage rule deps, add examples by Zach Daniel
+
 ## v1.0.0-rc.3 (2026-02-10)
 
 
