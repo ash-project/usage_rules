@@ -255,9 +255,8 @@ if Code.ensure_loaded?(Igniter) do
         |> Enum.filter(fn {_name, path, _mode} ->
           Igniter.exists?(igniter, Path.join(path, "usage-rules.md"))
         end)
-        |> Enum.map(fn {pkg_name, _path, mode} ->
-          spec = if mode == :reference, do: {pkg_name, :reference}, else: pkg_name
-          {:"use-#{pkg_name}", [usage_rules: [spec]]}
+        |> Enum.map(fn {pkg_name, _path, _mode} ->
+          {:"use-#{pkg_name}", [usage_rules: [pkg_name]]}
         end)
 
       # Merge explicit build specs on top of package-derived ones
@@ -719,7 +718,8 @@ if Code.ensure_loaded?(Igniter) do
            resolved_packages,
            custom_description
          ) do
-      skill_md = build_skill_md(igniter, skill_name, resolved_packages, custom_description)
+      skill_md =
+        build_skill_md(igniter, skill_name, resolved_packages, custom_description)
 
       igniter =
         Igniter.create_or_update_file(
@@ -733,27 +733,23 @@ if Code.ensure_loaded?(Igniter) do
           end
         )
 
-      # Reference files for sub-rules and reference-mode main rules from all packages
-      Enum.reduce(resolved_packages, igniter, fn {pkg_name, package_path, mode}, acc ->
-        # Create reference file for main usage-rules.md if this package is in reference mode
+      # Reference files for sub-rules and main rules from all packages
+      Enum.reduce(resolved_packages, igniter, fn {pkg_name, package_path, _mode}, acc ->
+        # Create reference file for main usage-rules.md
         acc =
-          if mode == :reference do
-            main_path = Path.join(package_path, "usage-rules.md")
-            content = read_dep_content(acc, main_path)
-            ref_path = Path.join([skill_dir, "references", "#{pkg_name}.md"])
+          case read_dep_content(acc, Path.join(package_path, "usage-rules.md")) do
+            "" ->
+              acc
 
-            if content != "" do
+            content ->
+              ref_path = Path.join([skill_dir, "references", "#{pkg_name}.md"])
+
               Igniter.create_or_update_file(
                 acc,
                 ref_path,
                 content,
                 fn source -> Rewrite.Source.update(source, :content, content) end
               )
-            else
-              acc
-            end
-          else
-            acc
           end
 
         sub_rules = find_available_sub_rules(acc, package_path)
@@ -815,23 +811,21 @@ if Code.ensure_loaded?(Igniter) do
     defp build_skill_body(igniter, _skill_name, resolved_packages) do
       sections = []
 
-      # Sub-rules as references (at the top for discoverability)
+      # Sub-rules as references
       all_sub_rules =
         Enum.flat_map(resolved_packages, fn {_pkg_name, package_path, _mode} ->
           find_available_sub_rules(igniter, package_path)
         end)
 
-      # Main rules from reference-mode packages
-      reference_main_rules =
-        resolved_packages
-        |> Enum.filter(fn {_pkg_name, _path, mode} -> mode == :reference end)
-        |> Enum.map(fn {pkg_name, _path, _mode} -> pkg_name end)
+      # All packages are references
+      all_main_rules =
+        Enum.map(resolved_packages, fn {pkg_name, _path, _mode} -> pkg_name end)
 
       all_references =
         Enum.map(all_sub_rules, fn sub_rule ->
           "- [#{sub_rule}](references/#{sub_rule}.md)"
         end) ++
-          Enum.map(reference_main_rules, fn pkg_name ->
+          Enum.map(all_main_rules, fn pkg_name ->
             "- [#{pkg_name}](references/#{pkg_name}.md)"
           end)
 
@@ -842,23 +836,6 @@ if Code.ensure_loaded?(Igniter) do
         else
           sections
         end
-
-      # Usage rules content from inline packages only
-      sections =
-        Enum.reduce(resolved_packages, sections, fn {pkg_name, package_path, mode}, acc ->
-          if mode == :reference do
-            acc
-          else
-            main_path = Path.join(package_path, "usage-rules.md")
-            content = read_dep_content(igniter, main_path)
-
-            if content != "" do
-              acc ++ ["## #{pkg_name} usage rules\n\n#{content}"]
-            else
-              acc
-            end
-          end
-        end)
 
       # Search docs for all packages
       package_names = Enum.map(resolved_packages, &elem(&1, 0))
@@ -943,12 +920,24 @@ if Code.ensure_loaded?(Igniter) do
     defp expand_dep_specs(specs, all_deps) do
       Enum.flat_map(specs, fn
         {%Regex{} = regex, :reference} ->
+          IO.warn(
+            "{~r/.../, :reference} is deprecated in usage_rules skill config. " <>
+              "All packages are now automatically written as reference files. " <>
+              "Use the regex directly instead: ~r/#{Regex.source(regex)}/"
+          )
+
           Enum.filter(all_deps, fn {name, _path} ->
             Regex.match?(regex, to_string(name))
           end)
           |> Enum.map(fn {name, path} -> {name, path, :reference} end)
 
         {pkg_name, :reference} when is_atom(pkg_name) ->
+          IO.warn(
+            "{:#{pkg_name}, :reference} is deprecated in usage_rules skill config. " <>
+              "All packages are now automatically written as reference files. " <>
+              "Use the atom directly instead: :#{pkg_name}"
+          )
+
           case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
             nil -> []
             {name, path} -> [{name, path, :reference}]
@@ -958,12 +947,12 @@ if Code.ensure_loaded?(Igniter) do
           Enum.filter(all_deps, fn {name, _path} ->
             Regex.match?(regex, to_string(name))
           end)
-          |> Enum.map(fn {name, path} -> {name, path, :inline} end)
+          |> Enum.map(fn {name, path} -> {name, path, :reference} end)
 
         pkg_name when is_atom(pkg_name) ->
           case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
             nil -> []
-            {name, path} -> [{name, path, :inline}]
+            {name, path} -> [{name, path, :reference}]
           end
       end)
       |> Enum.uniq_by(&elem(&1, 0))

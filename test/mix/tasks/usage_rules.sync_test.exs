@@ -399,13 +399,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "---"
       assert content =~ "name: use-foo"
       assert content =~ "managed-by: usage-rules"
-      assert content =~ "Foo Usage"
+      assert content =~ "[foo](references/foo.md)"
       assert content =~ "mix usage_rules.search_docs"
+
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      assert ref_content =~ "Foo Usage"
     end
 
     test "builds a skill combining multiple packages" do
@@ -425,10 +429,12 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/foo-and-bar/SKILL.md")
+        |> assert_creates(".claude/skills/foo-and-bar/references/foo.md")
+        |> assert_creates(".claude/skills/foo-and-bar/references/bar.md")
 
       content = file_content(igniter, ".claude/skills/foo-and-bar/SKILL.md")
-      assert content =~ "Foo Rules"
-      assert content =~ "Bar Rules"
+      assert content =~ "[foo](references/foo.md)"
+      assert content =~ "[bar](references/bar.md)"
       assert content =~ "-p foo"
       assert content =~ "-p bar"
     end
@@ -448,7 +454,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       |> assert_creates("custom/skills/use-foo/SKILL.md")
     end
 
-    test "skill includes sub-rules as references" do
+    test "skill includes sub-rules and main rules as references" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Usage",
@@ -463,14 +469,19 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
         |> assert_creates(".claude/skills/use-foo/references/testing.md")
 
       skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert skill_content =~ "Additional References"
+      assert skill_content =~ "[foo](references/foo.md)"
       assert skill_content =~ "[testing](references/testing.md)"
 
       ref_content = file_content(igniter, ".claude/skills/use-foo/references/testing.md")
       assert ref_content =~ "Testing Guide"
+
+      main_ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      assert main_ref_content =~ "Foo Usage"
     end
 
     test "skips skills for packages not in deps" do
@@ -527,9 +538,12 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "My custom instructions"
-      assert content =~ "Updated content."
+      assert content =~ "[foo](references/foo.md)"
       assert content =~ "<!-- usage-rules-skill-start -->"
       refute content =~ "Old body"
+
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      assert ref_content =~ "Updated content."
     end
 
     test "skill includes managed section markers" do
@@ -587,11 +601,14 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-ash/SKILL.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash_postgres.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash_json_api.md")
 
       content = file_content(igniter, ".claude/skills/use-ash/SKILL.md")
-      assert content =~ "Ash Core"
-      assert content =~ "Ash Postgres"
-      assert content =~ "Ash JSON API"
+      assert content =~ "[ash](references/ash.md)"
+      assert content =~ "[ash_postgres](references/ash_postgres.md)"
+      assert content =~ "[ash_json_api](references/ash_json_api.md)"
       refute content =~ "Req"
     end
 
@@ -681,11 +698,15 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(skills: [location: ".claude/skills", deps: [:foo]])
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "name: use-foo"
       assert content =~ "managed-by: usage-rules"
-      assert content =~ "Foo Usage"
+      assert content =~ "[foo](references/foo.md)"
+
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      assert ref_content =~ "Foo Usage"
     end
 
     test "auto-builds skills for multiple packages" do
@@ -717,8 +738,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         |> assert_creates(".claude/skills/foo-and-bar/SKILL.md")
 
       combo_content = file_content(igniter, ".claude/skills/foo-and-bar/SKILL.md")
-      assert combo_content =~ "Foo Rules"
-      assert combo_content =~ "Bar Rules"
+      assert combo_content =~ "[foo](references/foo.md)"
+      assert combo_content =~ "[bar](references/bar.md)"
     end
 
     test "supports regex to match multiple deps" do
@@ -787,7 +808,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert agents_content =~ "bar"
 
       skill_content = file_content(igniter, ".claude/skills/use-bar/SKILL.md")
-      assert skill_content =~ "Bar Rules"
+      assert skill_content =~ "[bar](references/bar.md)"
     end
   end
 
@@ -801,8 +822,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
   end
 
-  describe "reference mode in skills" do
-    test "build with {:dep, :reference} creates reference file instead of inlining" do
+  describe "deprecated {:dep, :reference} format" do
+    test "build with {:dep, :reference} still works but all packages are references" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo guidance.",
@@ -817,22 +838,22 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/foo.md")
         |> assert_creates(".claude/skills/my-skill/references/bar.md")
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
-      # Foo should be inlined
-      assert skill_content =~ "Foo Rules"
-      assert skill_content =~ "Foo guidance."
-      # Bar should be a reference link, not inlined
+      # Both foo and bar should be reference links
+      assert skill_content =~ "[foo](references/foo.md)"
       assert skill_content =~ "[bar](references/bar.md)"
-      refute skill_content =~ "Bar guidance."
 
-      ref_content = file_content(igniter, ".claude/skills/my-skill/references/bar.md")
-      assert ref_content =~ "Bar Rules"
-      assert ref_content =~ "Bar guidance."
+      foo_ref = file_content(igniter, ".claude/skills/my-skill/references/foo.md")
+      assert foo_ref =~ "Foo Rules"
+
+      bar_ref = file_content(igniter, ".claude/skills/my-skill/references/bar.md")
+      assert bar_ref =~ "Bar Rules"
     end
 
-    test "build with {~r/.../, :reference} creates reference files for matching deps" do
+    test "build with {~r/.../, :reference} still works but all packages are references" do
       igniter =
         project_with_deps(%{
           "deps/ash/usage-rules.md" => "# Ash Core",
@@ -848,20 +869,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/ash-expert/SKILL.md")
+        |> assert_creates(".claude/skills/ash-expert/references/ash.md")
         |> assert_creates(".claude/skills/ash-expert/references/ash_postgres.md")
         |> assert_creates(".claude/skills/ash-expert/references/ash_json_api.md")
 
       skill_content = file_content(igniter, ".claude/skills/ash-expert/SKILL.md")
-      # Ash core should be inlined
-      assert skill_content =~ "Ash Core"
-      # Ash extensions should be references
+      assert skill_content =~ "[ash](references/ash.md)"
       assert skill_content =~ "[ash_postgres](references/ash_postgres.md)"
       assert skill_content =~ "[ash_json_api](references/ash_json_api.md)"
-      refute skill_content =~ "Ash Postgres"
-      refute skill_content =~ "Ash JSON API"
     end
 
-    test "deps config with {:dep, :reference} creates reference-mode skill" do
+    test "deps config with {:dep, :reference} still works" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo content."
@@ -872,13 +890,12 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
       skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert skill_content =~ "[foo](references/foo.md)"
-      refute skill_content =~ "Foo content."
 
       ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
       assert ref_content =~ "Foo Rules"
     end
 
-    test "deps config with {~r/.../, :reference} creates reference-mode skills" do
+    test "deps config with {~r/.../, :reference} still works" do
       project_with_deps(%{
         "deps/ash_postgres/usage-rules.md" => "# Ash Postgres Rules",
         "deps/ash_json_api/usage-rules.md" => "# Ash JSON API Rules"
@@ -890,7 +907,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       |> assert_creates(".claude/skills/use-ash_json_api/references/ash_json_api.md")
     end
 
-    test "reference packages still appear in search docs and mix tasks sections" do
+    test "all packages appear in search docs section" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules",
@@ -900,7 +917,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           skills: [
             location: ".claude/skills",
             build: [
-              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+              "my-skill": [usage_rules: [:foo, :bar]]
             ]
           ]
         )
@@ -911,7 +928,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert skill_content =~ "-p bar"
     end
 
-    test "reference and sub-rules both appear in Additional References" do
+    test "main rules and sub-rules both appear in Additional References" do
       igniter =
         project_with_deps(%{
           "deps/foo/usage-rules.md" => "# Foo Rules",
@@ -922,16 +939,18 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           skills: [
             location: ".claude/skills",
             build: [
-              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+              "my-skill": [usage_rules: [:foo, :bar]]
             ]
           ]
         )
         |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/foo.md")
         |> assert_creates(".claude/skills/my-skill/references/testing.md")
         |> assert_creates(".claude/skills/my-skill/references/bar.md")
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
       assert skill_content =~ "Additional References"
+      assert skill_content =~ "[foo](references/foo.md)"
       assert skill_content =~ "[testing](references/testing.md)"
       assert skill_content =~ "[bar](references/bar.md)"
     end
