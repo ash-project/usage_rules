@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.0-rc.3 (2026-02-10)
+
+
+
+
+### Improvements:
+
+* use refernece files for all usage rules by Zach Daniel
+
 ## v1.0.0-rc.2 (2026-02-07)
 
 
