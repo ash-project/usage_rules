@@ -72,18 +72,12 @@ if Code.ensure_loaded?(Igniter) do
                 build: [
                   "ash-framework": [
                     # The description tells people how to use this skill.
-                    description: \"""
-                    Use this skill working with Ash Framework or any of its extensions. 
-                    Always consult this when making any domain changes, features or fixes.
-                    \""",
+                    description: "Use this skill working with Ash Framework or any of its extensions. Always consult this when making any domain changes, features or fixes.",
                     # Include all Ash dependencies
                     usage_rules: [:ash, ~r/^ash_/]
                   ],
                   "phoenix-framework": [
-                    description: \"""
-                    Use this skill working with Phoenix Framework.
-                    Consult this when working with the web layer, controllers, views, liveviews etc.
-                    \""",
+                    description: "Use this skill working with Phoenix Framework. Consult this when working with the web layer, controllers, views, liveviews etc.",
                     # Include all Phoenix dependencies
                     usage_rules: [:phoenix, ~r/^phoenix_/]
                   ]
