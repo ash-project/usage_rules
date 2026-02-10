@@ -12,6 +12,11 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.2 (2026-02-10)
+
+Fix examples in error outputs and docs
+
+
 ## v1.0.1 (2026-02-10)
 
 
