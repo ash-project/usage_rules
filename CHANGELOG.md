@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.0.3 (2026-02-10)
+
+
+
+
+### Bug Fixes:
+
+* ensure multiline skill descriptions are formatted properly by Zach Daniel
+
 ## v1.0.2 (2026-02-10)
 
 Fix examples in error outputs and docs
