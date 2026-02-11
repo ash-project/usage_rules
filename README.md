@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 
 **UsageRules** is a config-driven dev tool for Elixir projects that manages your AGENTS.md file and agent skills from dependencies. It:
 
-- Gathers and consolidates `usage-rules.md` files (or files from a `usage_rules` directory) from your dependencies into an `AGENTS.md` (or any file)
+- Gathers and consolidates `usage-rules.md` files (or files from a `usage-rules` directory) from your dependencies into an `AGENTS.md` (or any file)
 - Generates agent skills (`SKILL.md` files) from dependency usage rules
 - Provides built-in usage rules for Elixir and OTP
 - Includes a powerful documentation search task via `mix usage_rules.search_docs`
