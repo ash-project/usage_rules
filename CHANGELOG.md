@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.1.0 (2026-02-11)
+
+
+
+
+### Features:
+
+* include sub_rules by default instead of on selection or `:all` by Zach Daniel
+
 ## v1.0.3 (2026-02-10)
 
 
