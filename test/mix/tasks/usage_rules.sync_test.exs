@@ -105,19 +105,45 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       end)
     end
 
-    test "errors when a package has no usage-rules.md" do
-      # Give bar a sub-rule file so it's discovered as a dep, but no main usage-rules.md
+    test "errors when a package is not a dependency (no usage-rules files)" do
       project_with_deps(%{
-        "deps/foo/usage-rules.md" => "# Foo Rules",
-        "deps/bar/usage-rules/something.md" => "# Something"
+        "deps/foo/usage-rules.md" => "# Foo Rules"
       })
       |> sync(file: "AGENTS.md", usage_rules: [:foo, :bar])
       |> assert_has_issue(fn issue ->
         String.contains?(
           issue,
-          "Package :bar is a dependency but does not have a usage-rules.md file"
+          "Package :bar is listed in usage_rules but is not a dependency"
         )
       end)
+    end
+
+    test "includes sub-rules by default when using atom spec" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [:foo])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      assert content =~ "Foo Ecto"
+      assert content =~ "Foo Testing"
+    end
+
+    test "package with only sub-rules (no main file) works" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [:foo])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Ecto"
     end
 
     test "strips SPDX comments from dependency content" do
@@ -191,6 +217,67 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "Main Foo"
       assert content =~ "Foo Ecto"
       assert content =~ "Foo Testing"
+    end
+  end
+
+  describe "sub_rules option" do
+    test "explicit sub_rules: :all includes main and all sub-rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [{:foo, sub_rules: :all}])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      assert content =~ "Foo Ecto"
+      assert content =~ "Foo Testing"
+    end
+
+    test "sub_rules list includes main and specified sub-rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [{:foo, sub_rules: ["ecto"]}])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      assert content =~ "Foo Ecto"
+      refute content =~ "Foo Testing"
+    end
+
+    test "sub_rules list errors on missing sub-rule" do
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo Main"
+      })
+      |> sync(file: "AGENTS.md", usage_rules: [{:foo, sub_rules: ["nonexistent"]}])
+      |> assert_has_issue(fn issue ->
+        String.contains?(issue, "does not have a usage-rules/nonexistent.md file")
+      end)
+    end
+
+    test "sub_rules option combines with link option" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{:foo, sub_rules: ["ecto"], link: :markdown}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "[foo usage rules](deps/foo/usage-rules.md)"
+      assert content =~ "[foo:ecto usage rules](deps/foo/usage-rules/ecto.md)"
     end
   end
 
@@ -273,6 +360,38 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
       content = file_content(igniter, "AGENTS.md")
       assert content =~ "@deps/ash_postgres/usage-rules.md"
+    end
+
+    test "regex includes sub-rules by default" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash/usage-rules/ecto.md" => "# Ash Ecto",
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [~r/^ash/])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Core"
+      assert content =~ "Ash Ecto"
+      assert content =~ "Ash Postgres"
+    end
+
+    test "regex with sub_rules option limits sub-rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash/usage-rules/ecto.md" => "# Ash Ecto",
+          "deps/ash/usage-rules/testing.md" => "# Ash Testing"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [{~r/^ash/, sub_rules: ["ecto"]}])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Core"
+      assert content =~ "Ash Ecto"
+      refute content =~ "Ash Testing"
     end
   end
 

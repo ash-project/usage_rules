@@ -367,13 +367,12 @@ if Code.ensure_loaded?(Igniter) do
               resolve_regex_usage_rules(igniter, all_deps, regex, opts, rules_acc, errors_acc)
 
             nil ->
-              {package_name, sub_rule, opts} = parse_spec(spec)
+              {package_name, opts} = parse_spec(spec)
 
               resolve_named_usage_rules(
                 igniter,
                 all_deps,
                 package_name,
-                sub_rule,
                 opts,
                 rules_acc,
                 errors_acc
@@ -389,15 +388,38 @@ if Code.ensure_loaded?(Igniter) do
     defp extract_regex_spec(_), do: nil
 
     defp resolve_regex_usage_rules(igniter, all_deps, regex, opts, rules_acc, errors_acc) do
+      sub_rules_opt = opts[:sub_rules] || :all
+
       found =
         all_deps
         |> Enum.filter(fn {name, _path} -> Regex.match?(regex, to_string(name)) end)
         |> Enum.flat_map(fn {package_name, package_path} ->
-          if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
-            [{package_name, package_path, nil, opts}]
-          else
-            []
-          end
+          main =
+            if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+              [{package_name, package_path, nil, opts}]
+            else
+              []
+            end
+
+          subs =
+            case sub_rules_opt do
+              :all ->
+                find_available_sub_rules(igniter, package_path)
+                |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
+
+              list when is_list(list) ->
+                Enum.flat_map(list, fn sr ->
+                  sub_path = Path.join([package_path, "usage-rules", "#{sr}.md"])
+
+                  if Igniter.exists?(igniter, sub_path) do
+                    [{package_name, package_path, sr, opts}]
+                  else
+                    []
+                  end
+                end)
+            end
+
+          main ++ subs
         end)
 
       {rules_acc ++ found, errors_acc}
@@ -407,18 +429,28 @@ if Code.ensure_loaded?(Igniter) do
            igniter,
            all_deps,
            package_name,
-           sub_rule,
            opts,
            rules_acc,
            errors_acc
          ) do
       case Enum.find(all_deps, fn {name, _path} -> name == package_name end) do
         {_name, package_path} ->
-          case sub_rule do
-            "all" ->
-              found =
+          sub_rules_opt = opts[:sub_rules] || :all
+
+          main =
+            if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+              [{package_name, package_path, nil, opts}]
+            else
+              []
+            end
+
+          case sub_rules_opt do
+            :all ->
+              subs =
                 find_available_sub_rules(igniter, package_path)
                 |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
+
+              found = main ++ subs
 
               if Enum.any?(found) do
                 {rules_acc ++ found, errors_acc}
@@ -426,33 +458,27 @@ if Code.ensure_loaded?(Igniter) do
                 {rules_acc,
                  errors_acc ++
                    [
-                     "Package :#{package_name} is a dependency but has no sub-rules in usage-rules/"
+                     "Package :#{package_name} is a dependency but does not have a usage-rules.md file or sub-rules in usage-rules/"
                    ]}
               end
 
-            nil ->
-              if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
-                {rules_acc ++ [{package_name, package_path, nil, opts}], errors_acc}
-              else
-                {rules_acc,
-                 errors_acc ++
-                   [
-                     "Package :#{package_name} is a dependency but does not have a usage-rules.md file"
-                   ]}
-              end
+            list when is_list(list) ->
+              {subs, sub_errors} =
+                Enum.reduce(list, {[], []}, fn sr, {found_acc, err_acc} ->
+                  sub_path = Path.join([package_path, "usage-rules", "#{sr}.md"])
 
-            sub_rule_name ->
-              sub_path = Path.join([package_path, "usage-rules", "#{sub_rule_name}.md"])
+                  if Igniter.exists?(igniter, sub_path) do
+                    {found_acc ++ [{package_name, package_path, sr, opts}], err_acc}
+                  else
+                    {found_acc,
+                     err_acc ++
+                       [
+                         "Package :#{package_name} does not have a usage-rules/#{sr}.md file"
+                       ]}
+                  end
+                end)
 
-              if Igniter.exists?(igniter, sub_path) do
-                {rules_acc ++ [{package_name, package_path, sub_rule_name, opts}], errors_acc}
-              else
-                {rules_acc,
-                 errors_acc ++
-                   [
-                     "Package :#{package_name} does not have a usage-rules/#{sub_rule_name}.md file"
-                   ]}
-              end
+              {rules_acc ++ main ++ subs, errors_acc ++ sub_errors}
           end
 
         nil ->
@@ -465,32 +491,32 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     @builtin_aliases %{
-      elixir: {:usage_rules, "elixir"},
-      otp: {:usage_rules, "otp"}
+      elixir: {:usage_rules, [sub_rules: ["elixir"]]},
+      otp: {:usage_rules, [sub_rules: ["otp"]]}
     }
 
     defp parse_spec({inner, opts}) when is_list(opts) do
-      {name, sub_rule} = parse_spec_name(inner)
-      {name, sub_rule, opts}
+      {name, inner_opts} = parse_spec_inner(inner)
+      {name, Keyword.merge(inner_opts, opts)}
     end
 
     defp parse_spec(spec) do
-      {name, sub_rule} = parse_spec_name(spec)
-      {name, sub_rule, []}
+      parse_spec_inner(spec)
     end
 
-    defp parse_spec_name(spec) do
+    defp parse_spec_inner(spec) do
       case spec do
         atom when is_atom(atom) and is_map_key(@builtin_aliases, atom) ->
           @builtin_aliases[atom]
 
         atom when is_atom(atom) ->
-          {atom, nil}
+          {atom, []}
 
         binary when is_binary(binary) ->
           case String.split(binary, ":", parts: 2) do
-            [pkg] -> {String.to_atom(pkg), nil}
-            [pkg, sub] -> {String.to_atom(pkg), sub}
+            [pkg] -> {String.to_atom(pkg), []}
+            [pkg, "all"] -> {String.to_atom(pkg), [sub_rules: :all]}
+            [pkg, sub] -> {String.to_atom(pkg), [sub_rules: [sub]]}
           end
       end
     end
