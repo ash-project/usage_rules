@@ -92,6 +92,34 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "no_rules"
     end
 
+    test "syncs with {:all, link: :markdown} generates markdown links for all packages" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "deps/bar/usage-rules.md" => "# Bar Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: {:all, link: :markdown})
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "[bar usage rules](deps/bar/usage-rules.md)"
+      assert content =~ "[foo usage rules](deps/foo/usage-rules.md)"
+    end
+
+    test "syncs with {:all, link: :at} generates @ links for all packages" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "deps/bar/usage-rules.md" => "# Bar Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: {:all, link: :at})
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "@deps/bar/usage-rules.md"
+      assert content =~ "@deps/foo/usage-rules.md"
+    end
+
     test "errors when a package is not a dependency" do
       project_with_deps(%{
         "deps/foo/usage-rules.md" => "# Foo Rules"
