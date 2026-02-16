@@ -297,7 +297,7 @@ if Code.ensure_loaded?(Igniter) do
         |> Enum.map(fn {dep, path} -> {dep, Path.relative_to_cwd(path)} end)
 
       igniter_deps = get_deps_from_igniter(igniter)
-      (mix_deps ++ igniter_deps) |> Enum.uniq()
+      (mix_deps ++ igniter_deps) |> Enum.uniq() |> Enum.sort_by(&elem(&1, 0))
     end
 
     defp get_deps_from_igniter(igniter) do
