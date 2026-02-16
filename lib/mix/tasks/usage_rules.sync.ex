@@ -190,18 +190,21 @@ if Code.ensure_loaded?(Igniter) do
     defp validate_link_options(nil), do: nil
     defp validate_link_options(:all), do: nil
 
+    defp validate_link_options({:all, opts}) when is_list(opts), do: validate_link_option(opts)
+
     defp validate_link_options(specs) when is_list(specs) do
       Enum.find_value(specs, fn
-        {_inner, opts} when is_list(opts) ->
-          case opts[:link] do
-            nil -> nil
-            style when style in [:at, :markdown] -> nil
-            other -> "usage_rules link must be :at or :markdown, got: #{inspect(other)}"
-          end
-
-        _ ->
-          nil
+        {_inner, opts} when is_list(opts) -> validate_link_option(opts)
+        _ -> nil
       end)
+    end
+
+    defp validate_link_option(opts) do
+      case opts[:link] do
+        nil -> nil
+        style when style in [:at, :markdown] -> nil
+        other -> "usage_rules link must be :at or :markdown, got: #{inspect(other)}"
+      end
     end
 
     defp include_dep_sources(igniter) do
@@ -336,13 +339,16 @@ if Code.ensure_loaded?(Igniter) do
 
     defp resolve_usage_rules(_igniter, _all_deps, nil), do: {[], []}
 
-    defp resolve_usage_rules(igniter, all_deps, :all) do
+    defp resolve_usage_rules(igniter, all_deps, :all),
+      do: resolve_usage_rules(igniter, all_deps, {:all, []})
+
+    defp resolve_usage_rules(igniter, all_deps, {:all, opts}) when is_list(opts) do
       rules =
         get_packages_with_usage_rules(igniter, all_deps)
         |> Enum.flat_map(fn {package_name, package_path} ->
           main_rules =
             if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
-              [{package_name, package_path, nil, []}]
+              [{package_name, package_path, nil, opts}]
             else
               []
             end
@@ -350,7 +356,7 @@ if Code.ensure_loaded?(Igniter) do
           sub_rules =
             find_available_sub_rules(igniter, package_path)
             |> Enum.map(fn sub_rule_name ->
-              {package_name, package_path, sub_rule_name, []}
+              {package_name, package_path, sub_rule_name, opts}
             end)
 
           main_rules ++ sub_rules
