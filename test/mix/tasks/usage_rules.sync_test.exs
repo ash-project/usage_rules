@@ -393,6 +393,26 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "Ash Ecto"
       refute content =~ "Ash Testing"
     end
+
+    test "regex produces sections in stable sorted order" do
+      igniter =
+        project_with_deps(%{
+          "deps/zeta/usage-rules.md" => "# Zeta Rules",
+          "deps/alpha/usage-rules.md" => "# Alpha Rules",
+          "deps/mango/usage-rules.md" => "# Mango Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [~r/./])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+
+      alpha_pos = :binary.match(content, "## alpha usage") |> elem(0)
+      mango_pos = :binary.match(content, "## mango usage") |> elem(0)
+      zeta_pos = :binary.match(content, "## zeta usage") |> elem(0)
+
+      assert alpha_pos < mango_pos
+      assert mango_pos < zeta_pos
+    end
   end
 
   describe "per-dep link option" do
