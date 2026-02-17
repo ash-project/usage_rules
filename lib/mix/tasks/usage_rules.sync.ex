@@ -98,7 +98,10 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Mix.Task
     def run(argv) do
-      if Enum.any?(argv) do
+      {_opts, remaining, invalid} =
+        OptionParser.parse(argv, strict: Igniter.Mix.Task.Info.global_options()[:switches])
+
+      if Enum.any?(remaining ++ invalid) do
         Mix.raise("""
         WARNING: `mix usage_rules.sync` no longer accepts command-line arguments.
 
@@ -107,6 +110,8 @@ if Code.ensure_loaded?(Igniter) do
         #{__MODULE__.Docs.code_sample(4)}
 
         Then simply run: mix usage_rules.sync
+
+        Supported flags (passed through to Igniter): --yes, --dry-run, --verbose, --check
 
         Run `mix help usage_rules.sync` for full configuration options.
         """)
