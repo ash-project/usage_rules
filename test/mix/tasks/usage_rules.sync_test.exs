@@ -307,6 +307,46 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "[foo usage rules](deps/foo/usage-rules.md)"
       assert content =~ "[foo:ecto usage rules](deps/foo/usage-rules/ecto.md)"
     end
+
+    test "main: false suppresses the main usage-rules.md" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{:foo, sub_rules: :all, main: false}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      refute content =~ "Foo Main"
+      assert content =~ "Foo Ecto"
+      assert content =~ "Foo Testing"
+    end
+
+    test "main: false with link option for sub-rules only" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [
+            {:foo, sub_rules: []},
+            {:foo, sub_rules: :all, main: false, link: :markdown}
+          ]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      refute content =~ "[foo usage rules]"
+      assert content =~ "[foo:ecto usage rules](deps/foo/usage-rules/ecto.md)"
+    end
   end
 
   describe "regex in usage_rules" do

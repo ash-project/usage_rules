@@ -401,7 +401,8 @@ if Code.ensure_loaded?(Igniter) do
         |> Enum.filter(fn {name, _path} -> Regex.match?(regex, to_string(name)) end)
         |> Enum.flat_map(fn {package_name, package_path} ->
           main =
-            if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+            if opts[:main] != false &&
+                 Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
               [{package_name, package_path, nil, opts}]
             else
               []
@@ -444,7 +445,8 @@ if Code.ensure_loaded?(Igniter) do
           sub_rules_opt = opts[:sub_rules] || :all
 
           main =
-            if Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
+            if opts[:main] != false &&
+                 Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) do
               [{package_name, package_path, nil, opts}]
             else
               []

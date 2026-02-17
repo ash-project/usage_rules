@@ -157,6 +157,7 @@ Each entry in the `usage_rules` list can be:
 | `{:package, link: :markdown}` | Link with `[name](deps/package/usage-rules.md)` style |
 | `{~r/pattern/, link: :markdown}` | Link all matching dependencies with markdown-style |
 | `{"package:sub_rule", link: :at}` | Link a specific sub-rule with @-style |
+| `{:package, main: false}` | Exclude the main `usage-rules.md`, include only sub-rules |
 
 ### Skills options
 
@@ -250,6 +251,24 @@ defp usage_rules do
   ]
 end
 ```
+
+### Inline main rules, link sub-rules
+
+If a package has many sub-rules and you want to keep the main rules inlined but link to sub-rules instead of inlining them all, use `main: false` to declare the same package twice with different options:
+
+```elixir
+defp usage_rules do
+  [
+    file: "AGENTS.md",
+    usage_rules: [
+      {:ash, sub_rules: []},                                  # inline main rules only
+      {:ash, sub_rules: :all, main: false, link: :markdown}   # link sub-rules only
+    ]
+  ]
+end
+```
+
+The first entry inlines the main `usage-rules.md` with no sub-rules. The second entry adds all sub-rules as markdown links, with `main: false` preventing a duplicate main entry.
 
 ## Agent Skills
 
