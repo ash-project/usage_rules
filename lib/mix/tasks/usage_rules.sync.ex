@@ -103,15 +103,14 @@ if Code.ensure_loaded?(Igniter) do
 
       if Enum.any?(remaining ++ invalid) do
         Mix.raise("""
-        WARNING: `mix usage_rules.sync` no longer accepts command-line arguments.
-
+        WARNING: `mix usage_rules.sync` does not accept task-specific arguments.
         Configuration is now done in your `mix.exs` project config:
 
         #{__MODULE__.Docs.code_sample(4)}
 
         Then simply run: mix usage_rules.sync
 
-        Supported flags (passed through to Igniter): --yes, --dry-run, --verbose, --check
+        Only Igniter global flags are accepted (e.g. --yes, --dry-run, --check, --verbose).
 
         Run `mix help usage_rules.sync` for full configuration options.
         """)
