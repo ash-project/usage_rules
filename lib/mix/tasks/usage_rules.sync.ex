@@ -98,15 +98,19 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Mix.Task
     def run(argv) do
-      if Enum.any?(argv) do
-        Mix.raise("""
-        WARNING: `mix usage_rules.sync` no longer accepts command-line arguments.
+      {_opts, remaining, invalid} =
+        OptionParser.parse(argv, strict: Igniter.Mix.Task.Info.global_options()[:switches])
 
+      if Enum.any?(remaining ++ invalid) do
+        Mix.raise("""
+        WARNING: `mix usage_rules.sync` does not accept task-specific arguments.
         Configuration is now done in your `mix.exs` project config:
 
         #{__MODULE__.Docs.code_sample(4)}
 
         Then simply run: mix usage_rules.sync
+
+        Only Igniter global flags are accepted (e.g. --yes, --dry-run, --check, --verbose).
 
         Run `mix help usage_rules.sync` for full configuration options.
         """)
