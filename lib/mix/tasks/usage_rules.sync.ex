@@ -912,6 +912,8 @@ if Code.ensure_loaded?(Igniter) do
             "- [#{pkg_name}](references/#{pkg_name}.md)"
           end)
 
+      all_references = Enum.uniq(all_references)
+
       sections =
         if Enum.any?(all_references) do
           ref_lines = Enum.join(all_references, "\n")
