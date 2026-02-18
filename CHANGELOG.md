@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.1 (2026-02-18)
+
+
+
+
+### Bug Fixes:
+
+* deduplicate skill references when sub-rule name matches package name (#56) (#57) by Tom Meier
+
 ## v1.2.0 (2026-02-18)
 
 
