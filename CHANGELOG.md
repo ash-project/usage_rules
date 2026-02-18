@@ -12,6 +12,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.0 (2026-02-18)
+
+
+
+
+### Features:
+
+* support options for :all in usage_rules config (#53) by Jinkyou Son
+
+### Improvements:
+
+* allow excluding main usage-rules.md while including sub-rules by Zach Daniel
+
 ## v1.1.0 (2026-02-11)
 
 

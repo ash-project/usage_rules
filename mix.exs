@@ -5,7 +5,7 @@
 defmodule UsageRules.MixProject do
   use Mix.Project
 
-  @version "1.1.0"
+  @version "1.2.0"
   @description """
   A config-driven dev tool for Elixir projects to manage AGENTS.md files and agent skills from dependencies
   """
