@@ -1004,6 +1004,33 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute Map.has_key?(igniter.rewrite.sources, "skills/use-old/SKILL.md")
       assert Map.has_key?(igniter.rewrite.sources, "skills/custom-skill/SKILL.md")
     end
+
+    test "no duplicate references when sub-rule name matches package name" do
+      igniter =
+        project_with_deps(%{
+          "deps/phoenix/usage-rules/phoenix.md" => "# Phoenix Rules",
+          "deps/phoenix/usage-rules/liveview.md" => "# LiveView Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "my-skill": [usage_rules: [:phoenix]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/phoenix.md")
+        |> assert_creates(".claude/skills/my-skill/references/liveview.md")
+
+      skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+
+      assert skill_content =~ "Additional References"
+      assert skill_content =~ "[liveview](references/liveview.md)"
+
+      # phoenix sub-rule + phoenix package should produce only one reference
+      assert [_] = Regex.scan(~r"\[phoenix\]\(references/phoenix\.md\)", skill_content)
+    end
   end
 
   describe "skills.deps (auto-build shorthand)" do
