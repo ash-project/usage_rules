@@ -1454,6 +1454,5 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       |> assert_creates(".claude/skills/bar-skill/SKILL.md")
       |> assert_creates(".claude/skills/foo-built/SKILL.md")
     end
-
   end
 end
