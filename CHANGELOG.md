@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.2 (2026-02-26)
+
+
+
+
+### Improvements:
+
+* support copying skills shipped directly by packages by Zach Daniel
+
 ## v1.2.1 (2026-02-18)
 
 
