@@ -63,6 +63,8 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
         # or use skills
         skills: [
           location: ".claude/skills",
+          # Pull in pre-built skills shipped directly by packages
+          package_skills: [:ash, ~r/^ash_/],
           # build skills that combine multiple usage rules
           build: [
             "ash-framework": [
@@ -215,6 +217,8 @@ if Code.ensure_loaded?(Igniter) do
       igniter
       |> Igniter.include_glob("deps/*/usage-rules.md")
       |> Igniter.include_glob("deps/*/usage-rules/*.md")
+      |> Igniter.include_glob("deps/*/usage-rules/skills/*/SKILL.md")
+      |> Igniter.include_glob("deps/*/usage-rules/skills/*/**/*")
     end
 
     # -------------------------------------------------------------------
@@ -268,11 +272,29 @@ if Code.ensure_loaded?(Igniter) do
       build_specs = package_build_specs ++ (skills_config[:build] || [])
       build_names = Enum.map(build_specs, fn {name, _opts} -> to_string(name) end)
 
-      igniter = remove_stale_managed_skills(igniter, skills_location, build_names)
+      # Discover package-provided skill names for stale cleanup
+      package_skills_specs = skills_config[:package_skills] || []
+
+      package_skill_names =
+        discover_package_skill_names(igniter, all_deps, package_skills_specs)
+
+      igniter =
+        remove_stale_managed_skills(
+          igniter,
+          skills_location,
+          build_names ++ package_skill_names
+        )
 
       igniter =
         if Enum.any?(build_specs) do
           build_custom_skills(igniter, all_deps, build_specs, skills_location)
+        else
+          igniter
+        end
+
+      igniter =
+        if Enum.any?(package_skills_specs) do
+          sync_package_skills(igniter, all_deps, package_skills_specs, skills_location)
         else
           igniter
         end
@@ -312,7 +334,9 @@ if Code.ensure_loaded?(Igniter) do
         igniter.rewrite.sources
         |> Enum.filter(fn {path, _source} ->
           String.match?(path, ~r|^deps/[^/]+/usage-rules\.md$|) ||
-            String.match?(path, ~r|^deps/[^/]+/usage-rules/[^/]+\.md$|)
+            String.match?(path, ~r|^deps/[^/]+/usage-rules/[^/]+\.md$|) ||
+            String.match?(path, ~r|^deps/[^/]+/usage-rules/skills/[^/]+/SKILL\.md$|) ||
+            String.match?(path, ~r|^deps/[^/]+/usage-rules/skills/[^/]+/.+$|)
         end)
         |> Enum.map(fn {path, _source} ->
           package_name =
@@ -961,6 +985,211 @@ if Code.ensure_loaded?(Igniter) do
         end
 
       Enum.join(sections, "\n\n")
+    end
+
+    # -------------------------------------------------------------------
+    # Package-provided skills
+    # -------------------------------------------------------------------
+
+    defp discover_package_skill_names(igniter, all_deps, package_skills_specs) do
+      matching_packages = expand_package_skill_specs(package_skills_specs, all_deps)
+
+      Enum.flat_map(matching_packages, fn {_pkg_name, pkg_path} ->
+        find_package_skill_dirs(igniter, pkg_path)
+      end)
+      |> Enum.uniq()
+    end
+
+    defp sync_package_skills(igniter, all_deps, package_skills_specs, skills_location) do
+      matching_packages = expand_package_skill_specs(package_skills_specs, all_deps)
+
+      Enum.reduce(matching_packages, igniter, fn {pkg_name, pkg_path}, acc ->
+        skill_dirs = find_package_skill_dirs(acc, pkg_path)
+
+        Enum.reduce(skill_dirs, acc, fn skill_name, inner_acc ->
+          src_skill_dir = Path.join([pkg_path, "usage-rules", "skills", skill_name])
+          dst_skill_dir = Path.join(skills_location, skill_name)
+
+          src_skill_path = Path.join(src_skill_dir, "SKILL.md")
+          dst_skill_path = Path.join(dst_skill_dir, "SKILL.md")
+
+          src_content = read_dep_content(inner_acc, src_skill_path)
+          managed_content = package_skill_to_managed(src_content, pkg_name)
+
+          inner_acc =
+            Igniter.create_or_update_file(
+              inner_acc,
+              dst_skill_path,
+              managed_content,
+              fn source ->
+                current = Rewrite.Source.get(source, :content)
+                new_content = update_skill_content(current, managed_content)
+                Rewrite.Source.update(source, :content, new_content)
+              end
+            )
+
+          # Copy any companion files (e.g. references/) verbatim
+          companion_files = find_package_skill_companions(inner_acc, src_skill_dir)
+
+          Enum.reduce(companion_files, inner_acc, fn {rel_path, content}, acc2 ->
+            dst_path = Path.join(dst_skill_dir, rel_path)
+
+            Igniter.create_or_update_file(
+              acc2,
+              dst_path,
+              content,
+              fn source -> Rewrite.Source.update(source, :content, content) end
+            )
+          end)
+        end)
+      end)
+    end
+
+    defp expand_package_skill_specs(specs, all_deps) do
+      Enum.flat_map(specs, fn
+        %Regex{} = regex ->
+          Enum.filter(all_deps, fn {name, _path} -> Regex.match?(regex, to_string(name)) end)
+
+        pkg_name when is_atom(pkg_name) ->
+          case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
+            nil -> []
+            dep -> [dep]
+          end
+      end)
+      |> Enum.uniq_by(&elem(&1, 0))
+    end
+
+    defp find_package_skill_dirs(igniter, package_path) do
+      skills_dir = Path.join([package_path, "usage-rules", "skills"])
+
+      source_skill_dirs =
+        igniter.rewrite.sources
+        |> Enum.filter(fn {path, _source} ->
+          String.starts_with?(path, skills_dir <> "/") &&
+            String.ends_with?(path, "/SKILL.md")
+        end)
+        |> Enum.map(fn {path, _} ->
+          path
+          |> String.trim_leading(skills_dir <> "/")
+          |> String.split("/")
+          |> hd()
+        end)
+        |> Enum.sort()
+
+      if Enum.any?(source_skill_dirs) do
+        source_skill_dirs
+      else
+        case File.ls(skills_dir) do
+          {:ok, entries} ->
+            entries
+            |> Enum.filter(fn entry ->
+              File.exists?(Path.join([skills_dir, entry, "SKILL.md"]))
+            end)
+            |> Enum.sort()
+
+          {:error, _} ->
+            []
+        end
+      end
+    end
+
+    defp find_package_skill_companions(igniter, src_skill_dir) do
+      source_companions =
+        igniter.rewrite.sources
+        |> Enum.filter(fn {path, _source} ->
+          String.starts_with?(path, src_skill_dir <> "/") &&
+            !String.ends_with?(path, "/SKILL.md")
+        end)
+        |> Enum.map(fn {path, source} ->
+          rel = String.trim_leading(path, src_skill_dir <> "/")
+          content = Rewrite.Source.get(source, :content)
+          {rel, content}
+        end)
+
+      if Enum.any?(source_companions) do
+        source_companions
+      else
+        case File.ls(src_skill_dir) do
+          {:ok, entries} ->
+            entries
+            |> Enum.flat_map(fn entry ->
+              full = Path.join(src_skill_dir, entry)
+
+              cond do
+                entry == "SKILL.md" ->
+                  []
+
+                File.dir?(full) ->
+                  case File.ls(full) do
+                    {:ok, sub_entries} ->
+                      Enum.flat_map(sub_entries, fn sub ->
+                        sub_full = Path.join(full, sub)
+
+                        if File.regular?(sub_full) do
+                          [{Path.join(entry, sub), File.read!(sub_full)}]
+                        else
+                          []
+                        end
+                      end)
+
+                    {:error, _} ->
+                      []
+                  end
+
+                File.regular?(full) ->
+                  [{entry, File.read!(full)}]
+
+                true ->
+                  []
+              end
+            end)
+
+          {:error, _} ->
+            []
+        end
+      end
+    end
+
+    defp package_skill_to_managed(content, _pkg_name) do
+      content = strip_spdx_comments(content)
+
+      case Regex.run(~r/\A(---\n.*?\n---\n*)(.*)\z/s, content) do
+        [_, frontmatter, body] ->
+          managed_frontmatter = inject_managed_metadata(frontmatter)
+
+          managed_frontmatter <>
+            "\n<!-- usage-rules-skill-start -->\n" <>
+            String.trim(body) <>
+            "\n<!-- usage-rules-skill-end -->"
+
+        nil ->
+          "---\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\n" <>
+            String.trim(content) <>
+            "\n<!-- usage-rules-skill-end -->"
+      end
+    end
+
+    defp inject_managed_metadata(frontmatter) do
+      cond do
+        String.contains?(frontmatter, "managed-by:") ->
+          frontmatter
+
+        String.contains?(frontmatter, "metadata:") ->
+          String.replace(
+            frontmatter,
+            "metadata:",
+            "metadata:\n  managed-by: usage-rules",
+            global: false
+          )
+
+        true ->
+          String.replace(
+            frontmatter,
+            "\n---",
+            "\nmetadata:\n  managed-by: usage-rules\n---",
+            global: false
+          )
+      end
     end
 
     # -------------------------------------------------------------------

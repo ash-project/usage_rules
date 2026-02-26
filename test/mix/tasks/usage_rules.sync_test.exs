@@ -1298,4 +1298,162 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert skill_content =~ "[bar](references/bar.md)"
     end
   end
+
+  describe "skills.package_skills (package-provided skills)" do
+    test "copies a pre-built skill from a package" do
+      skill_content = """
+      ---
+      name: my-skill
+      description: "Use this when working with Foo."
+      ---
+
+      ## Overview
+
+      Foo is great.
+      """
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/skills/my-skill/SKILL.md" => skill_content
+        })
+        |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert content =~ "name: my-skill"
+      assert content =~ "managed-by: usage-rules"
+      assert content =~ "Foo is great."
+      assert content =~ "<!-- usage-rules-skill-start -->"
+      assert content =~ "<!-- usage-rules-skill-end -->"
+    end
+
+    test "injects managed-by into existing metadata block" do
+      skill_content = """
+      ---
+      name: my-skill
+      description: "Use when working with Foo."
+      metadata:
+        author: foo-team
+      ---
+
+      Content here.
+      """
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/skills/my-skill/SKILL.md" => skill_content
+        })
+        |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+
+      content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert content =~ "managed-by: usage-rules"
+      assert content =~ "author: foo-team"
+    end
+
+    test "injects metadata section when no metadata in frontmatter" do
+      skill_content = """
+      ---
+      name: my-skill
+      description: "A skill."
+      ---
+
+      Content.
+      """
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/skills/my-skill/SKILL.md" => skill_content
+        })
+        |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+
+      content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert content =~ "metadata:\n  managed-by: usage-rules"
+    end
+
+    test "handles skill with no frontmatter" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/skills/my-skill/SKILL.md" => "Just content, no frontmatter."
+        })
+        |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+
+      content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
+      assert content =~ "managed-by: usage-rules"
+      assert content =~ "Just content, no frontmatter."
+    end
+
+    test "copies companion reference files" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/skills/my-skill/SKILL.md" => "---\nname: my-skill\n---\nBody.",
+          "deps/foo/usage-rules/skills/my-skill/references/guide.md" => "# Guide"
+        })
+        |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+        |> assert_creates(".claude/skills/my-skill/SKILL.md")
+        |> assert_creates(".claude/skills/my-skill/references/guide.md")
+
+      ref_content = file_content(igniter, ".claude/skills/my-skill/references/guide.md")
+      assert ref_content =~ "# Guide"
+    end
+
+    test "supports regex to match multiple packages" do
+      project_with_deps(%{
+        "deps/ash_postgres/usage-rules/skills/ash-postgres/SKILL.md" =>
+          "---\nname: ash-postgres\n---\nContent.",
+        "deps/ash_json_api/usage-rules/skills/ash-json-api/SKILL.md" =>
+          "---\nname: ash-json-api\n---\nContent.",
+        "deps/req/usage-rules/skills/req/SKILL.md" => "---\nname: req\n---\nContent."
+      })
+      |> sync(skills: [location: ".claude/skills", package_skills: [~r/^ash_/]])
+      |> assert_creates(".claude/skills/ash-postgres/SKILL.md")
+      |> assert_creates(".claude/skills/ash-json-api/SKILL.md")
+    end
+
+    test "multiple packages can each provide multiple skills" do
+      project_with_deps(%{
+        "deps/foo/usage-rules/skills/skill-a/SKILL.md" => "---\nname: skill-a\n---\nA.",
+        "deps/foo/usage-rules/skills/skill-b/SKILL.md" => "---\nname: skill-b\n---\nB.",
+        "deps/bar/usage-rules/skills/skill-c/SKILL.md" => "---\nname: skill-c\n---\nC."
+      })
+      |> sync(skills: [location: ".claude/skills", package_skills: [:foo, :bar]])
+      |> assert_creates(".claude/skills/skill-a/SKILL.md")
+      |> assert_creates(".claude/skills/skill-b/SKILL.md")
+      |> assert_creates(".claude/skills/skill-c/SKILL.md")
+    end
+
+    test "stale package skills are removed on re-sync" do
+      stale_skill_md =
+        "---\nname: my-skill\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\nContent.\n<!-- usage-rules-skill-end -->"
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          ".claude/skills/my-skill/SKILL.md" => stale_skill_md
+        })
+        |> sync(skills: [location: ".claude/skills", deps: [:foo]])
+
+      # The stale package skill should have been removed
+      assert ".claude/skills/my-skill/SKILL.md" not in Map.keys(igniter.rewrite.sources)
+    end
+
+    test "package_skills and build can be combined" do
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo Rules",
+        "deps/bar/usage-rules/skills/bar-skill/SKILL.md" =>
+          "---\nname: bar-skill\n---\nBar content."
+      })
+      |> sync(
+        skills: [
+          location: ".claude/skills",
+          package_skills: [:bar],
+          build: [
+            "foo-built": [usage_rules: [:foo]]
+          ]
+        ]
+      )
+      |> assert_creates(".claude/skills/bar-skill/SKILL.md")
+      |> assert_creates(".claude/skills/foo-built/SKILL.md")
+    end
+
+  end
 end

@@ -123,6 +123,9 @@ defp usage_rules do
       # Supports regex for matching multiple deps:
       # deps: [~r/^ash_/],
 
+      # Pull in pre-built skills shipped directly by packages
+      package_skills: [:ash, ~r/^ash_/],
+
       # Compose custom skills from multiple packages
       build: [
         "ash-framework": [
@@ -166,6 +169,7 @@ Each entry in the `usage_rules` list can be:
 | `location` | `string` | Output directory for skills (default: `".claude/skills"`) |
 | `deps` | `list` | Auto-build a `use-<pkg>` skill per listed dependency. Supports atoms and regexes |
 | `build` | `keyword` | Define custom composed skills from multiple packages' usage rules |
+| `package_skills` | `list` | Pull in pre-built skills shipped directly by packages. Supports atoms and regexes |
 
 ## Usage Rules
 
@@ -387,6 +391,35 @@ usage-rules/
   html.md               # html specific rules
   database.md           # database specific rules
 ```
+
+### Pre-built skills
+
+Packages can also ship pre-built skills that users can pull in directly. Place skill files in a `usage-rules/skills/` directory:
+
+```
+usage-rules/skills/
+  my-skill/
+    SKILL.md             # the skill definition
+    references/
+      some-ref.md        # optional reference files
+```
+
+Each `SKILL.md` is a standard skill file with YAML frontmatter:
+
+```markdown
+---
+name: my-skill
+description: "Use this skill when working with MyPackage."
+---
+
+## Overview
+
+Content describing how to use the package effectively...
+```
+
+Users enable these by listing the package in `skills: [package_skills: [...]]` in their `mix.exs`. When synced, the skills are copied to the user's skills location with the `managed-by: usage-rules` marker injected automatically (enabling stale cleanup). Companion files (e.g. `references/`) are copied verbatim alongside the skill.
+
+Make sure your `usage-rules/skills/` directory is included in your hex package's `files` option.
 
 ### Migrating from v0.1
 
