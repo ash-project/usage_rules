@@ -97,11 +97,9 @@ That's it. The config is the source of truth — packages in the file but not in
 defp usage_rules do
   [
     # The file to write usage rules into (required for usage_rules syncing)
-    file: "AGENTS.md",
-
-    # Which packages to include (required for usage_rules syncing)
-    # :all discovers every dependency with a usage-rules.md and inlines them
-    usage_rules: :all,
+    file: "CLAUDE.md",
+    # include links in your CLAUDE.md for all packages with usage_rules
+    usage_rules: [{~r/.*/, link: :markdown}],
     # Or list specific packages and sub-rules:
     # usage_rules: [
     #   :ash,                         # inlined (default)
