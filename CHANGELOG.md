@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.4 (2026-03-02)
+
+
+
+
+### Improvements:
+
+* link to md docs before html docs, and hint at search_docs by Zach Daniel
+
 ## v1.2.3 (2026-02-27)
 
 
