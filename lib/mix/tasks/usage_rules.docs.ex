@@ -50,6 +50,15 @@ defmodule Mix.Tasks.UsageRules.Docs do
           Mix.raise("Invalid expression: #{module}")
 
         _decomposition ->
+          Mix.shell().info("""
+          Searching local docs for 
+
+              #{module}
+
+          Use `mix usage_rules.search_docs` to search online documentation for more results.
+
+          """)
+
           Code.eval_quoted(
             quote do
               require IEx.Helpers

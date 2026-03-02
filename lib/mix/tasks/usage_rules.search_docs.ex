@@ -250,10 +250,13 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
         end
       end)
 
+    ref_md = String.replace(ref, ~r/\.html/, ".md")
+
     footer = """
 
     **full docs:**
-    https://hexdocs.pm/#{extract_package_name(package)}/#{ref}
+    https://hexdocs.pm/#{extract_package_name(package)}/#{ref_md}
+    or https://hexdocs.pm/#{extract_package_name(package)}/#{ref}
 
     ---
 
