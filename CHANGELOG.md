@@ -12,6 +12,15 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.5 (2026-03-09)
+
+
+
+
+### Bug Fixes:
+
+* --check false positive after disk round-trip due to eof_newline mismatch (#59) by Barnabas Jovanovics
+
 ## v1.2.4 (2026-03-02)
 
 
