@@ -1455,4 +1455,189 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       |> assert_creates(".claude/skills/foo-built/SKILL.md")
     end
   end
+
+  describe "idempotency (--check)" do
+    # Rewrite.Source.write/2 calls eof_newline/1 before File.write/2
+    # (see rewrite/lib/rewrite/source.ex line ~297 and ~970):
+    #
+    #   defp write(%Source{path: path, content: content}, ...) do
+    #     file_write(path, eof_newline(content))
+    #   end
+    #   defp eof_newline(string), do: String.trim_trailing(string) <> "\n"
+    #
+    # In test mode, simulate_write stores raw content without this
+    # normalization, so tests don't reproduce the trailing-newline mismatch
+    # that causes --check failures in real usage.  This helper applies the
+    # same eof_newline transform to simulate a real disk round-trip.
+    defp simulate_disk_roundtrip(igniter) do
+      test_files =
+        Enum.reduce(igniter.assigns[:test_files], igniter.assigns[:test_files], fn
+          {"deps/" <> _, _content}, acc ->
+            acc
+
+          {_path, ""}, acc ->
+            acc
+
+          {path, content}, acc ->
+            Map.put(acc, path, String.trim_trailing(content) <> "\n")
+        end)
+
+      igniter
+      |> Map.put(:rewrite, Rewrite.new())
+      |> Map.put(:assigns, %{
+        test_mode?: true,
+        test_files: test_files,
+        igniter_exs: igniter.assigns[:igniter_exs]
+      })
+      |> Igniter.include_glob("**/*.*")
+    end
+
+    test "second sync reports no changes for skills.build" do
+      config = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "use-foo": [
+              description: "Foo skill",
+              usage_rules: [:foo, :bar]
+            ]
+          ]
+        ]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nUse foo wisely.",
+          "deps/bar/usage-rules.md" => "# Bar Rules\n\nUse bar wisely."
+        })
+        |> sync(config)
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/bar.md")
+        |> apply_igniter!()
+        |> simulate_disk_roundtrip()
+
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+
+    test "second sync reports no changes for skills.deps" do
+      config = [
+        skills: [
+          location: ".claude/skills",
+          deps: [:foo]
+        ]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nUse foo wisely."
+        })
+        |> sync(config)
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> apply_igniter!()
+        |> simulate_disk_roundtrip()
+
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+
+    test "second sync reports no changes for AGENTS.md" do
+      config = [
+        file: "AGENTS.md",
+        usage_rules: [:foo]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nUse foo wisely."
+        })
+        |> sync(config)
+        |> assert_creates("AGENTS.md")
+        |> apply_igniter!()
+        |> simulate_disk_roundtrip()
+
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+
+    test "second sync reports no changes with sub-rules" do
+      config = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "use-foo": [usage_rules: [:foo]]
+          ]
+        ]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "deps/foo/usage-rules/testing.md" => "# Testing Guide"
+        })
+        |> sync(config)
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/testing.md")
+        |> apply_igniter!()
+        |> simulate_disk_roundtrip()
+
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+
+    test "second sync reports no changes with custom content in SKILL.md" do
+      config = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "use-foo": [
+              description: "Foo skill",
+              usage_rules: [:foo]
+            ]
+          ]
+        ]
+      ]
+
+      # First sync creates the skill
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules\n\nUse foo wisely."
+        })
+        |> sync(config)
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> apply_igniter!()
+
+      # Inject custom content between frontmatter and managed section
+      skill_content = igniter.assigns[:test_files][".claude/skills/use-foo/SKILL.md"]
+
+      [frontmatter, managed] =
+        String.split(skill_content, "\n\n<!-- usage-rules-skill-start -->", parts: 2)
+
+      custom_skill =
+        frontmatter <>
+          "\n\nMy custom instructions go here.\n\n<!-- usage-rules-skill-start -->" <>
+          managed
+
+      test_files =
+        Map.put(igniter.assigns[:test_files], ".claude/skills/use-foo/SKILL.md", custom_skill)
+
+      igniter = put_in(igniter.assigns[:test_files], test_files)
+
+      igniter =
+        igniter
+        |> simulate_disk_roundtrip()
+
+      # Second sync should preserve custom content and report no changes
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+  end
 end
