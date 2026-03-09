@@ -853,7 +853,7 @@ if Code.ensure_loaded?(Igniter) do
                 acc,
                 ref_path,
                 content,
-                fn source -> Rewrite.Source.update(source, :content, content) end
+                fn source -> update_source_content(source, content) end
               )
           end
 
@@ -868,7 +868,7 @@ if Code.ensure_loaded?(Igniter) do
             inner_acc,
             ref_path,
             content,
-            fn source -> Rewrite.Source.update(source, :content, content) end
+            fn source -> update_source_content(source, content) end
           )
         end)
       end)
@@ -1038,7 +1038,7 @@ if Code.ensure_loaded?(Igniter) do
               acc2,
               dst_path,
               content,
-              fn source -> Rewrite.Source.update(source, :content, content) end
+              fn source -> update_source_content(source, content) end
             )
           end)
         end)
@@ -1346,17 +1346,47 @@ if Code.ensure_loaded?(Igniter) do
       if String.contains?(current_content, "<!-- usage-rules-skill-start -->") do
         custom = extract_skill_custom_content(current_content)
 
-        if custom != "" do
-          [new_frontmatter, new_managed] =
-            String.split(new_skill_md, "\n\n<!-- usage-rules-skill-start -->", parts: 2)
+        new_content =
+          if custom != "" do
+            [frontmatter, managed_body] =
+              String.split(new_skill_md, "\n\n<!-- usage-rules-skill-start -->", parts: 2)
 
-          new_frontmatter <>
-            "\n\n" <> custom <> "\n\n<!-- usage-rules-skill-start -->" <> new_managed
+            frontmatter <>
+              "\n\n" <> custom <> "\n\n<!-- usage-rules-skill-start -->" <> managed_body
+          else
+            new_skill_md
+          end
+
+        # Only return new content if the managed section actually changed.
+        # Rewrite.Source.write/2 applies eof_newline/1 which appends "\n"
+        # to disk content (see rewrite/lib/rewrite/source.ex, write/3 and
+        # eof_newline/1).  The generated content may not end with "\n", so
+        # subsequent reads see a trailing-whitespace diff that isn't a real
+        # change.  Comparing just the managed section avoids this.
+        if managed_section_changed?(current_content, new_content) do
+          new_content
         else
-          new_skill_md
+          current_content
         end
       else
         new_skill_md
+      end
+    end
+
+    defp managed_section_changed?(current, new) do
+      extract_managed_section(current) != extract_managed_section(new)
+    end
+
+    defp extract_managed_section(content) do
+      case String.split(content, "<!-- usage-rules-skill-start -->", parts: 2) do
+        [_, rest] ->
+          case String.split(rest, "<!-- usage-rules-skill-end -->", parts: 2) do
+            [managed, _] -> String.trim(managed)
+            _ -> String.trim(rest)
+          end
+
+        _ ->
+          nil
       end
     end
 
@@ -1383,6 +1413,21 @@ if Code.ensure_loaded?(Igniter) do
 
     defp strip_spdx_comments(content) do
       String.replace(content, ~r/\A\s*<!--\s*\n(?:.*?SPDX-.*?\n)*.*?-->\s*\n*/s, "")
+    end
+
+    # Updates a reference file's content, ignoring trailing whitespace differences.
+    # Reference files have no managed-section markers — the entire file is synced
+    # content.  Rewrite.Source.write/2 applies eof_newline/1 (see
+    # rewrite/lib/rewrite/source.ex) which appends "\n" when writing to disk,
+    # but dep content may not end with one, causing false diffs on subsequent syncs.
+    defp update_source_content(source, new_content) do
+      current = Rewrite.Source.get(source, :content)
+
+      if String.trim_trailing(current) == String.trim_trailing(new_content) do
+        source
+      else
+        Rewrite.Source.update(source, :content, new_content)
+      end
     end
 
     defp format_yaml_string(str) do

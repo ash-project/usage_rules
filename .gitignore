@@ -25,3 +25,6 @@ usage_rules-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Scratch test file
+test/scratch_test.exs
