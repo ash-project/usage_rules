@@ -72,7 +72,10 @@ defmodule Mix.Tasks.UsageRules.Docs do
                 {_, output} = StringIO.contents(cap)
 
                 # Use regex with case insensitivity to detect the hint about callbacks
-                if String.match?(output, ~r/No documentation for function #{Regex.escape(unquote(module))} was found,.*callback.*same name/i) do
+                if String.match?(
+                     output,
+                     ~r/No documentation for function #{Regex.escape(unquote(module))} was found,.*callback.*same name/i
+                   ) do
                   Process.group_leader(self(), original_gl)
                   IEx.Helpers.b(unquote(quoted))
                 else

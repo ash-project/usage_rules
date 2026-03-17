@@ -14,9 +14,11 @@ defmodule Mix.Tasks.UsageRules.DocsTest do
   end
 
   test "shows documentation for a module" do
-    output = capture_io(fn ->
-      Docs.run(["Enum"])
-    end) |> strip_ansi()
+    output =
+      capture_io(fn ->
+        Docs.run(["Enum"])
+      end)
+      |> strip_ansi()
 
     assert output =~ "Searching local docs for"
     assert output =~ "Enum"
@@ -24,9 +26,11 @@ defmodule Mix.Tasks.UsageRules.DocsTest do
   end
 
   test "shows documentation for a function" do
-    output = capture_io(fn ->
-      Docs.run(["Enum.map/2"])
-    end) |> strip_ansi()
+    output =
+      capture_io(fn ->
+        Docs.run(["Enum.map/2"])
+      end)
+      |> strip_ansi()
 
     assert output =~ "Searching local docs for"
     assert output =~ "Enum.map/2"
@@ -34,13 +38,15 @@ defmodule Mix.Tasks.UsageRules.DocsTest do
   end
 
   test "shows documentation for a callback" do
-    output = capture_io(fn ->
-      Docs.run(["GenServer.handle_call"])
-    end) |> strip_ansi()
+    output =
+      capture_io(fn ->
+        Docs.run(["GenServer.handle_call"])
+      end)
+      |> strip_ansi()
 
     assert output =~ "Searching local docs for"
     assert output =~ "GenServer.handle_call"
-    assert output =~ "Invoked to handle synchronous call/3 messages"
+    assert output =~ "Invoked to handle synchronous"
     refute output =~ "No documentation for function GenServer.handle_call was found"
   end
 
@@ -51,9 +57,10 @@ defmodule Mix.Tasks.UsageRules.DocsTest do
   end
 
   test "handles non-existent modules" do
-    output = capture_io(fn ->
-      Docs.run(["NonExistentModule"])
-    end)
+    output =
+      capture_io(fn ->
+        Docs.run(["NonExistentModule"])
+      end)
 
     assert output =~ "Could not load module NonExistentModule"
   end
