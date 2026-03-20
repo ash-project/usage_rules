@@ -945,6 +945,36 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "Req"
     end
 
+    test "regex build skips deps without usage rules when rendering references and search docs" do
+      igniter =
+        project_with_deps(%{
+          "deps/phoenix/usage-rules/ecto.md" => "# Phoenix Ecto",
+          "deps/phoenix/usage-rules/liveview.md" => "# Phoenix LiveView",
+          "deps/phoenix_ecto/mix.exs" => "defmodule PhoenixEcto.MixProject, do: nil",
+          "deps/phoenix_html/mix.exs" => "defmodule PhoenixHTML.MixProject, do: nil"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "phoenix-framework": [usage_rules: [:phoenix, ~r/^phoenix_/]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/phoenix-framework/SKILL.md")
+        |> assert_creates(".claude/skills/phoenix-framework/references/ecto.md")
+        |> assert_creates(".claude/skills/phoenix-framework/references/liveview.md")
+
+      content = file_content(igniter, ".claude/skills/phoenix-framework/SKILL.md")
+
+      assert content =~ "[ecto](references/ecto.md)"
+      assert content =~ "[liveview](references/liveview.md)"
+      refute content =~ "references/phoenix_ecto.md"
+      refute content =~ "references/phoenix_html.md"
+      refute content =~ "-p phoenix_ecto"
+      refute content =~ "-p phoenix_html"
+    end
+
     test "removes stale managed skills no longer in build list" do
       stale_skill_md =
         "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\nOld skill.\n<!-- usage-rules-skill-end -->"
