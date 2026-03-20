@@ -4,6 +4,7 @@
 
 defmodule Mix.Tasks.UsageRules.SyncTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
   import Igniter.Test
 
   defp sync(igniter, config) do
@@ -21,6 +22,22 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     igniter.rewrite
     |> Rewrite.source!(path)
     |> Rewrite.Source.get(:content)
+  end
+
+  defp capture_stderr_result(fun) do
+    parent = self()
+
+    output =
+      capture_io(:stderr, fn ->
+        send(parent, {:captured_result, fun.()})
+      end)
+
+    result =
+      receive do
+        {:captured_result, result} -> result
+      end
+
+    {output, result}
   end
 
   describe "config validation" do
@@ -1167,22 +1184,26 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
   describe "deprecated {:dep, :reference} format" do
     test "build with {:dep, :reference} still works but all packages are references" do
-      igniter =
-        project_with_deps(%{
-          "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo guidance.",
-          "deps/bar/usage-rules.md" => "# Bar Rules\n\nBar guidance."
-        })
-        |> sync(
-          skills: [
-            location: ".claude/skills",
-            build: [
-              "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+      {output, igniter} =
+        capture_stderr_result(fn ->
+          project_with_deps(%{
+            "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo guidance.",
+            "deps/bar/usage-rules.md" => "# Bar Rules\n\nBar guidance."
+          })
+          |> sync(
+            skills: [
+              location: ".claude/skills",
+              build: [
+                "my-skill": [usage_rules: [:foo, {:bar, :reference}]]
+              ]
             ]
-          ]
-        )
-        |> assert_creates(".claude/skills/my-skill/SKILL.md")
-        |> assert_creates(".claude/skills/my-skill/references/foo.md")
-        |> assert_creates(".claude/skills/my-skill/references/bar.md")
+          )
+          |> assert_creates(".claude/skills/my-skill/SKILL.md")
+          |> assert_creates(".claude/skills/my-skill/references/foo.md")
+          |> assert_creates(".claude/skills/my-skill/references/bar.md")
+        end)
+
+      assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
       # Both foo and bar should be reference links
@@ -1197,24 +1218,28 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
 
     test "build with {~r/.../, :reference} still works but all packages are references" do
-      igniter =
-        project_with_deps(%{
-          "deps/ash/usage-rules.md" => "# Ash Core",
-          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
-          "deps/ash_json_api/usage-rules.md" => "# Ash JSON API"
-        })
-        |> sync(
-          skills: [
-            location: ".claude/skills",
-            build: [
-              "ash-expert": [usage_rules: [:ash, {~r/^ash_/, :reference}]]
+      {output, igniter} =
+        capture_stderr_result(fn ->
+          project_with_deps(%{
+            "deps/ash/usage-rules.md" => "# Ash Core",
+            "deps/ash_postgres/usage-rules.md" => "# Ash Postgres",
+            "deps/ash_json_api/usage-rules.md" => "# Ash JSON API"
+          })
+          |> sync(
+            skills: [
+              location: ".claude/skills",
+              build: [
+                "ash-expert": [usage_rules: [:ash, {~r/^ash_/, :reference}]]
+              ]
             ]
-          ]
-        )
-        |> assert_creates(".claude/skills/ash-expert/SKILL.md")
-        |> assert_creates(".claude/skills/ash-expert/references/ash.md")
-        |> assert_creates(".claude/skills/ash-expert/references/ash_postgres.md")
-        |> assert_creates(".claude/skills/ash-expert/references/ash_json_api.md")
+          )
+          |> assert_creates(".claude/skills/ash-expert/SKILL.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash_postgres.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash_json_api.md")
+        end)
+
+      assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/ash-expert/SKILL.md")
       assert skill_content =~ "[ash](references/ash.md)"
@@ -1223,13 +1248,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
 
     test "deps config with {:dep, :reference} still works" do
-      igniter =
-        project_with_deps(%{
-          "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo content."
-        })
-        |> sync(skills: [location: ".claude/skills", deps: [{:foo, :reference}]])
-        |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+      {output, igniter} =
+        capture_stderr_result(fn ->
+          project_with_deps(%{
+            "deps/foo/usage-rules.md" => "# Foo Rules\n\nFoo content."
+          })
+          |> sync(skills: [location: ".claude/skills", deps: [{:foo, :reference}]])
+          |> assert_creates(".claude/skills/use-foo/SKILL.md")
+          |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        end)
+
+      assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert skill_content =~ "[foo](references/foo.md)"
@@ -1239,15 +1268,20 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
 
     test "deps config with {~r/.../, :reference} still works" do
-      project_with_deps(%{
-        "deps/ash_postgres/usage-rules.md" => "# Ash Postgres Rules",
-        "deps/ash_json_api/usage-rules.md" => "# Ash JSON API Rules"
-      })
-      |> sync(skills: [location: ".claude/skills", deps: [{~r/^ash_/, :reference}]])
-      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
-      |> assert_creates(".claude/skills/use-ash_postgres/references/ash_postgres.md")
-      |> assert_creates(".claude/skills/use-ash_json_api/SKILL.md")
-      |> assert_creates(".claude/skills/use-ash_json_api/references/ash_json_api.md")
+      {output, _igniter} =
+        capture_stderr_result(fn ->
+          project_with_deps(%{
+            "deps/ash_postgres/usage-rules.md" => "# Ash Postgres Rules",
+            "deps/ash_json_api/usage-rules.md" => "# Ash JSON API Rules"
+          })
+          |> sync(skills: [location: ".claude/skills", deps: [{~r/^ash_/, :reference}]])
+          |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
+          |> assert_creates(".claude/skills/use-ash_postgres/references/ash_postgres.md")
+          |> assert_creates(".claude/skills/use-ash_json_api/SKILL.md")
+          |> assert_creates(".claude/skills/use-ash_json_api/references/ash_json_api.md")
+        end)
+
+      assert output =~ "deprecated in usage_rules skill config"
     end
 
     test "all packages appear in search docs section" do
