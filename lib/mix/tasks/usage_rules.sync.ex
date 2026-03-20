@@ -333,7 +333,8 @@ if Code.ensure_loaded?(Igniter) do
       if igniter.assigns[:test_mode?] do
         igniter.rewrite.sources
         |> Enum.filter(fn {path, _source} ->
-          String.match?(path, ~r|^deps/[^/]+/usage-rules\.md$|) ||
+          String.match?(path, ~r|^deps/[^/]+/mix\.exs$|) ||
+            String.match?(path, ~r|^deps/[^/]+/usage-rules\.md$|) ||
             String.match?(path, ~r|^deps/[^/]+/usage-rules/[^/]+\.md$|) ||
             String.match?(path, ~r|^deps/[^/]+/usage-rules/skills/[^/]+/SKILL\.md$|) ||
             String.match?(path, ~r|^deps/[^/]+/usage-rules/skills/[^/]+/.+$|)
@@ -353,12 +354,16 @@ if Code.ensure_loaded?(Igniter) do
     defp get_packages_with_usage_rules(igniter, all_deps) do
       Enum.filter(all_deps, fn
         {_name, path} when is_binary(path) and path != "" ->
-          Igniter.exists?(igniter, Path.join(path, "usage-rules.md")) ||
-            Igniter.exists?(igniter, Path.join(path, "usage-rules"))
+          package_has_usage_rules?(igniter, path)
 
         _ ->
           false
       end)
+    end
+
+    defp package_has_usage_rules?(igniter, package_path) do
+      Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")) ||
+        Enum.any?(find_available_sub_rules(igniter, package_path))
     end
 
     # -------------------------------------------------------------------
@@ -801,7 +806,12 @@ if Code.ensure_loaded?(Igniter) do
       custom_description = skill_opts[:description]
 
       # Resolve which packages to include in this skill (supports atoms and regexes)
-      resolved_packages = expand_dep_specs(usage_rule_specs, all_deps)
+      resolved_packages =
+        usage_rule_specs
+        |> expand_dep_specs(all_deps)
+        |> Enum.filter(fn {_pkg_name, package_path, _mode} ->
+          package_has_usage_rules?(igniter, package_path)
+        end)
 
       if Enum.any?(resolved_packages) do
         generate_built_skill(
