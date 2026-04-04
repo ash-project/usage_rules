@@ -1139,8 +1139,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         "deps/req/usage-rules.md" => "# Req Rules"
       })
       |> sync(skills: [location: ".claude/skills", deps: [~r/^ash_/]])
-      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
-      |> assert_creates(".claude/skills/use-ash_json_api/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash-json-api/SKILL.md")
     end
 
     test "regex skips deps without usage-rules.md" do
@@ -1149,7 +1149,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         "deps/ash_no_rules/mix.exs" => "defmodule AshNoRules.MixProject, do: nil"
       })
       |> sync(skills: [location: ".claude/skills", deps: [~r/^ash_/]])
-      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
     end
 
     test "regex and atoms can be mixed" do
@@ -1158,7 +1158,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         "deps/req/usage-rules.md" => "# Req Rules"
       })
       |> sync(skills: [location: ".claude/skills", deps: [~r/^ash_/, :req]])
-      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
       |> assert_creates(".claude/skills/use-req/SKILL.md")
     end
 
@@ -1167,7 +1167,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         "deps/ash_postgres/usage-rules.md" => "# Ash Postgres"
       })
       |> sync(skills: [location: ".claude/skills", deps: [~r/^ash_/, :ash_postgres]])
-      |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
+      |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
     end
   end
 
@@ -1305,10 +1305,10 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
             "deps/ash_json_api/usage-rules.md" => "# Ash JSON API Rules"
           })
           |> sync(skills: [location: ".claude/skills", deps: [{~r/^ash_/, :reference}]])
-          |> assert_creates(".claude/skills/use-ash_postgres/SKILL.md")
-          |> assert_creates(".claude/skills/use-ash_postgres/references/ash_postgres.md")
-          |> assert_creates(".claude/skills/use-ash_json_api/SKILL.md")
-          |> assert_creates(".claude/skills/use-ash_json_api/references/ash_json_api.md")
+          |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
+          |> assert_creates(".claude/skills/use-ash-postgres/references/ash_postgres.md")
+          |> assert_creates(".claude/skills/use-ash-json-api/SKILL.md")
+          |> assert_creates(".claude/skills/use-ash-json-api/references/ash_json_api.md")
         end)
 
       assert output =~ "deprecated in usage_rules skill config"
@@ -1702,6 +1702,151 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       igniter
       |> sync(config)
       |> assert_unchanged()
+    end
+  end
+
+  describe "agentskills.io spec compliance" do
+    test "skill name uses hyphens instead of underscores (auto-built from deps)" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres"
+        })
+        |> sync(skills: [location: ".claude/skills", deps: [:ash_postgres]])
+        |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/use-ash-postgres/SKILL.md")
+      assert content =~ "name: use-ash-postgres"
+    end
+
+    test "emits warning for build spec with non-compliant name" do
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo"
+      })
+      |> sync(
+        skills: [
+          location: ".claude/skills",
+          build: [
+            my_skill: [usage_rules: [:foo]]
+          ]
+        ]
+      )
+      |> assert_has_warning(fn warning ->
+        String.contains?(warning, "must only contain lowercase letters")
+      end)
+    end
+
+    test "emits warning for skill name exceeding 64 characters" do
+      long_name = String.duplicate("a", 65)
+
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo"
+      })
+      |> sync(
+        skills: [
+          location: ".claude/skills",
+          build: [
+            {String.to_atom(long_name), [usage_rules: [:foo]]}
+          ]
+        ]
+      )
+      |> assert_has_warning(fn warning ->
+        String.contains?(warning, "exceeds 64 characters")
+      end)
+    end
+
+    test "emits warning for skill name with leading hyphen" do
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo"
+      })
+      |> sync(
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "-bad-name": [usage_rules: [:foo]]
+          ]
+        ]
+      )
+      |> assert_has_warning(fn warning ->
+        String.contains?(warning, "must not start or end with a hyphen")
+      end)
+    end
+
+    test "emits warning for skill name with consecutive hyphens" do
+      project_with_deps(%{
+        "deps/foo/usage-rules.md" => "# Foo"
+      })
+      |> sync(
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "bad--name": [usage_rules: [:foo]]
+          ]
+        ]
+      )
+      |> assert_has_warning(fn warning ->
+        String.contains?(warning, "must not contain consecutive hyphens")
+      end)
+    end
+
+    test "emits warning for package skill with non-compliant name" do
+      project_with_deps(%{
+        "deps/foo/usage-rules/skills/bad_name/SKILL.md" =>
+          "---\nname: bad_name\ndescription: \"A skill.\"\n---\nContent."
+      })
+      |> sync(skills: [location: ".claude/skills", package_skills: [:foo]])
+      |> assert_has_warning(fn warning ->
+        String.contains?(warning, "must only contain lowercase letters")
+      end)
+    end
+
+    test "description longer than 1024 characters is truncated" do
+      long_description = String.duplicate("x", 1100)
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [
+                usage_rules: [:foo],
+                description: long_description
+              ]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      # The description in the frontmatter should be truncated to 1024 chars max
+      # (1021 chars + "...")
+      refute content =~ String.duplicate("x", 1025)
+      assert content =~ "..."
+    end
+
+    test "generated description within 1024 characters is not truncated" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [
+                usage_rules: [:foo],
+                description: "Short description."
+              ]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "Short description."
+      refute content =~ "..."
     end
   end
 end
