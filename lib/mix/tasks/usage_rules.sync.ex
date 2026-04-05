@@ -1504,13 +1504,28 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    # Truncates a description to the agentskills.io spec maximum of 1024 characters.
+    # Truncates a description to the agentskills.io spec maximum of 1024 bytes.
     defp truncate_description(description) do
-      if String.length(description) > 1024 do
-        String.slice(description, 0, 1021) <> "..."
+      if byte_size(description) > 1024 do
+        truncate_to_byte_size(description, 1021) <> "..."
       else
         description
       end
+    end
+
+    defp truncate_to_byte_size(string, max_bytes) do
+      string
+      |> String.graphemes()
+      |> Enum.reduce_while({"", 0}, fn grapheme, {acc, size} ->
+        new_size = size + byte_size(grapheme)
+
+        if new_size > max_bytes do
+          {:halt, {acc, size}}
+        else
+          {:cont, {acc <> grapheme, new_size}}
+        end
+      end)
+      |> elem(0)
     end
 
     defp format_yaml_string(str) do
