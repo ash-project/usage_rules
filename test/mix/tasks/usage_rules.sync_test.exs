@@ -1718,6 +1718,35 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert content =~ "name: use-ash-postgres"
     end
 
+    test "removes old skill with underscore name when normalized name is generated" do
+      old_skill_md = """
+      ---
+      name: use-ash_postgres
+      description: "Old."
+      metadata:
+        managed-by: usage-rules
+      ---
+
+      <!-- usage-rules-skill-start -->
+      Old content.
+      <!-- usage-rules-skill-end -->
+      """
+
+      igniter =
+        project_with_deps(%{
+          "deps/ash_postgres/usage-rules.md" => "# Ash Postgres Rules",
+          ".claude/skills/use-ash_postgres/SKILL.md" => old_skill_md
+        })
+        |> sync(skills: [location: ".claude/skills", deps: [:ash_postgres]])
+        |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
+
+      assert ".claude/skills/use-ash_postgres/SKILL.md" not in Map.keys(igniter.rewrite.sources)
+
+      content = file_content(igniter, ".claude/skills/use-ash-postgres/SKILL.md")
+      assert content =~ "name: use-ash-postgres"
+      assert content =~ "managed-by: usage-rules"
+    end
+
     test "emits warning for build spec with non-compliant name" do
       project_with_deps(%{
         "deps/foo/usage-rules.md" => "# Foo"
