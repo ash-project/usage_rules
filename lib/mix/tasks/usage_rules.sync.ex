@@ -265,7 +265,7 @@ if Code.ensure_loaded?(Igniter) do
           Igniter.exists?(igniter, Path.join(path, "usage-rules.md"))
         end)
         |> Enum.map(fn {pkg_name, _path, _mode} ->
-          {:"use-#{pkg_name}", [usage_rules: [pkg_name]]}
+          {:"use-#{normalize_skill_name(pkg_name)}", [usage_rules: [pkg_name]]}
         end)
 
       # Merge explicit build specs on top of package-derived ones
@@ -801,6 +801,8 @@ if Code.ensure_loaded?(Igniter) do
 
     defp build_single_skill(igniter, all_deps, skill_name, skill_opts, skills_location) do
       skill_name = to_string(skill_name)
+      igniter = warn_on_invalid_skill_name(igniter, skill_name)
+
       skill_dir = Path.join(skills_location, skill_name)
       usage_rule_specs = skill_opts[:usage_rules] || []
       custom_description = skill_opts[:description]
@@ -885,7 +887,9 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp build_skill_md(igniter, skill_name, resolved_packages, custom_description) do
-      description = custom_description || build_skill_description(skill_name, resolved_packages)
+      description =
+        (custom_description || build_skill_description(skill_name, resolved_packages))
+        |> truncate_description()
 
       formatted_description = format_yaml_string(description)
 
@@ -1017,6 +1021,8 @@ if Code.ensure_loaded?(Igniter) do
         skill_dirs = find_package_skill_dirs(acc, pkg_path)
 
         Enum.reduce(skill_dirs, acc, fn skill_name, inner_acc ->
+          inner_acc = warn_on_invalid_skill_name(inner_acc, skill_name)
+
           src_skill_dir = Path.join([pkg_path, "usage-rules", "skills", skill_name])
           dst_skill_dir = Path.join(skills_location, skill_name)
 
@@ -1437,6 +1443,73 @@ if Code.ensure_loaded?(Igniter) do
         source
       else
         Rewrite.Source.update(source, :content, new_content)
+      end
+    end
+
+    # Normalizes a skill name to comply with the agentskills.io specification:
+    # https://agentskills.io/specification#name-field
+    #
+    # - Lowercases the name
+    # - Replaces underscores with hyphens
+    # - Strips invalid characters (only a-z, 0-9, hyphens allowed)
+    # - Collapses consecutive hyphens
+    # - Trims leading/trailing hyphens
+    # - Truncates to 64 characters
+    defp normalize_skill_name(name) do
+      name
+      |> to_string()
+      |> String.downcase()
+      |> String.replace(~r/[_.\s]/, "-")
+      |> String.replace(~r/[^a-z0-9-]/, "")
+      |> String.replace(~r/-{2,}/, "-")
+      |> String.trim("-")
+      |> String.slice(0, 64)
+    end
+
+    defp warn_on_invalid_skill_name(igniter, name) do
+      case validate_skill_name(name) do
+        :ok -> igniter
+        {:error, message} -> Igniter.add_warning(igniter, message)
+      end
+    end
+
+    @skill_name_pattern ~r/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+
+    # Validates a skill name against the agentskills.io specification:
+    # https://agentskills.io/specification#name-field
+    defp validate_skill_name(name) when byte_size(name) > 64 do
+      {:error, "Skill name '#{name}' exceeds 64 characters (agentskills.io spec requires ≤ 64)"}
+    end
+
+    defp validate_skill_name("-" <> _ = name) do
+      {:error, "Skill name '#{name}' must not start or end with a hyphen (agentskills.io spec)"}
+    end
+
+    defp validate_skill_name(name) do
+      cond do
+        String.ends_with?(name, "-") ->
+          {:error,
+           "Skill name '#{name}' must not start or end with a hyphen (agentskills.io spec)"}
+
+        String.contains?(name, "--") ->
+          {:error,
+           "Skill name '#{name}' must not contain consecutive hyphens (agentskills.io spec)"}
+
+        not Regex.match?(@skill_name_pattern, name) ->
+          {:error,
+           "Skill name '#{name}' must only contain lowercase letters, numbers, and hyphens (agentskills.io spec)"}
+
+        true ->
+          :ok
+      end
+    end
+
+    # Truncates a description to the agentskills.io spec maximum of 1024 characters.
+    defp truncate_description(description) do
+      if String.length(description) > 1024 do
+        String.slice(description, 0, 1021) <> "..."
+      else
+        description
       end
     end
 
