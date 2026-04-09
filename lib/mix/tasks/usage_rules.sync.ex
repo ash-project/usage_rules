@@ -808,10 +808,10 @@ if Code.ensure_loaded?(Igniter) do
       custom_description = skill_opts[:description]
 
       # Resolve which packages to include in this skill (supports atoms and regexes)
+      all_expanded = expand_dep_specs(usage_rule_specs, all_deps)
+
       resolved_packages =
-        usage_rule_specs
-        |> expand_dep_specs(all_deps)
-        |> Enum.filter(fn {_pkg_name, package_path, _mode} ->
+        Enum.filter(all_expanded, fn {_pkg_name, package_path, _mode} ->
           package_has_usage_rules?(igniter, package_path)
         end)
 
@@ -821,6 +821,7 @@ if Code.ensure_loaded?(Igniter) do
           skill_name,
           skill_dir,
           resolved_packages,
+          all_expanded,
           custom_description
         )
       else
@@ -833,10 +834,11 @@ if Code.ensure_loaded?(Igniter) do
            skill_name,
            skill_dir,
            resolved_packages,
+           all_expanded,
            custom_description
          ) do
       skill_md =
-        build_skill_md(igniter, skill_name, resolved_packages, custom_description)
+        build_skill_md(igniter, skill_name, resolved_packages, all_expanded, custom_description)
 
       igniter =
         Igniter.create_or_update_file(
@@ -886,7 +888,7 @@ if Code.ensure_loaded?(Igniter) do
       end)
     end
 
-    defp build_skill_md(igniter, skill_name, resolved_packages, custom_description) do
+    defp build_skill_md(igniter, skill_name, resolved_packages, all_expanded, custom_description) do
       description =
         (custom_description || build_skill_description(skill_name, resolved_packages))
         |> truncate_description()
@@ -904,7 +906,7 @@ if Code.ensure_loaded?(Igniter) do
         """
         |> String.trim_trailing()
 
-      body = build_skill_body(igniter, skill_name, resolved_packages)
+      body = build_skill_body(igniter, skill_name, resolved_packages, all_expanded)
 
       frontmatter <>
         "\n\n" <>
@@ -929,18 +931,23 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    defp build_skill_body(igniter, _skill_name, resolved_packages) do
+    defp build_skill_body(igniter, _skill_name, resolved_packages, all_expanded) do
       sections = []
 
-      # Sub-rules as references
+      # Sub-rules as references (only from packages with usage rules)
       all_sub_rules =
         Enum.flat_map(resolved_packages, fn {_pkg_name, package_path, _mode} ->
           find_available_sub_rules(igniter, package_path)
         end)
 
-      # All packages are references
+      # Only include main rule links for packages that have a main usage-rules.md
+      # (a package may pass the filter via sub-rules alone, with no main file)
       all_main_rules =
-        Enum.map(resolved_packages, fn {pkg_name, _path, _mode} -> pkg_name end)
+        resolved_packages
+        |> Enum.filter(fn {_pkg_name, package_path, _mode} ->
+          read_dep_content(igniter, Path.join(package_path, "usage-rules.md")) != ""
+        end)
+        |> Enum.map(fn {pkg_name, _path, _mode} -> pkg_name end)
 
       all_references =
         Enum.map(all_sub_rules, fn sub_rule ->
@@ -960,8 +967,8 @@ if Code.ensure_loaded?(Igniter) do
           sections
         end
 
-      # Search docs for all packages
-      package_names = Enum.map(resolved_packages, &elem(&1, 0))
+      # Search docs for all matched packages (hexdocs exist regardless of usage-rules)
+      package_names = Enum.map(all_expanded, &elem(&1, 0))
 
       search_flags = Enum.map_join(package_names, " ", &"-p #{&1}")
 
@@ -978,9 +985,9 @@ if Code.ensure_loaded?(Igniter) do
             |> String.trim_trailing()
           ]
 
-      # Mix tasks from all packages (at the bottom)
+      # Mix tasks from all matched packages (at the bottom)
       all_mix_tasks =
-        Enum.flat_map(resolved_packages, fn {pkg_name, _path, _mode} ->
+        Enum.flat_map(all_expanded, fn {pkg_name, _path, _mode} ->
           discover_mix_tasks(pkg_name)
           |> Enum.map(fn {task, doc} -> {pkg_name, task, doc} end)
         end)

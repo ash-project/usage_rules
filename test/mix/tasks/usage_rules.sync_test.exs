@@ -945,7 +945,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "Req"
     end
 
-    test "regex build skips deps without usage rules when rendering references and search docs" do
+    test "regex build skips reference links for deps without usage rules but includes them in search docs" do
       igniter =
         project_with_deps(%{
           "deps/phoenix/usage-rules/ecto.md" => "# Phoenix Ecto",
@@ -967,12 +967,61 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
       content = file_content(igniter, ".claude/skills/phoenix-framework/SKILL.md")
 
+      # Sub-rule references are included
       assert content =~ "[ecto](references/ecto.md)"
       assert content =~ "[liveview](references/liveview.md)"
+
+      # Deps without usage rules should NOT have reference links
       refute content =~ "references/phoenix_ecto.md"
       refute content =~ "references/phoenix_html.md"
-      refute content =~ "-p phoenix_ecto"
-      refute content =~ "-p phoenix_html"
+
+      # Package with only sub-rules (no main usage-rules.md) should NOT have a main reference link
+      refute content =~ "[phoenix](references/phoenix.md)"
+
+      # But search docs should include ALL matched deps (they have hexdocs regardless)
+      assert content =~ "-p phoenix_ecto"
+      assert content =~ "-p phoenix_html"
+      assert content =~ "-p phoenix"
+    end
+
+    test "deps with main usage-rules.md get reference links, sub-rules-only deps do not" do
+      igniter =
+        project_with_deps(%{
+          # ash has a main usage-rules.md
+          "deps/ash/usage-rules.md" => "# Ash Framework",
+          # ash_postgres has only sub-rules, no main usage-rules.md
+          "deps/ash_postgres/usage-rules/migrations.md" => "# Migrations",
+          # ash_oban has no usage rules at all
+          "deps/ash_oban/mix.exs" => "defmodule AshOban.MixProject, do: nil"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "ash-framework": [usage_rules: [:ash, ~r/^ash_/]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/ash-framework/SKILL.md")
+        |> assert_creates(".claude/skills/ash-framework/references/ash.md")
+        |> assert_creates(".claude/skills/ash-framework/references/migrations.md")
+
+      content = file_content(igniter, ".claude/skills/ash-framework/SKILL.md")
+
+      # ash has main usage-rules.md → gets a reference link
+      assert content =~ "[ash](references/ash.md)"
+
+      # ash_postgres has sub-rules → sub-rule link present, but no main link
+      assert content =~ "[migrations](references/migrations.md)"
+      refute content =~ "[ash_postgres](references/ash_postgres.md)"
+
+      # ash_oban has no usage rules → no reference link at all
+      refute content =~ "references/ash_oban.md"
+
+      # Search docs include all matched deps
+      assert content =~ "-p ash"
+      assert content =~ "-p ash_postgres"
+      assert content =~ "-p ash_oban"
     end
 
     test "removes stale managed skills no longer in build list" do
