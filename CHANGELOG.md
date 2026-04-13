@@ -12,6 +12,21 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.6 (2026-04-13)
+
+
+
+
+### Bug Fixes:
+
+* only generate reference links for deps with actual content by Zach Daniel
+
+* normalize deps skill names per agentskills.io spec (#68) by Florian Kapfenberger
+
+* documentation retrieval for callbacks (#60) (#60) by Iulian Costan
+
+* filter out deps without usage rules in skills.build (#64) by Adam Royle
+
 ## v1.2.5 (2026-03-09)
 
 
