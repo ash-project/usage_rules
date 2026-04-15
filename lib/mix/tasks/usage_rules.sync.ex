@@ -809,18 +809,14 @@ if Code.ensure_loaded?(Igniter) do
 
       # Resolve which packages to include in this skill (supports atoms and regexes)
       all_expanded = expand_dep_specs(usage_rule_specs, all_deps)
+      package_refs = build_package_refs(igniter, all_expanded)
 
-      resolved_packages =
-        Enum.filter(all_expanded, fn {_pkg_name, package_path, _mode} ->
-          package_has_usage_rules?(igniter, package_path)
-        end)
-
-      if Enum.any?(resolved_packages) do
+      if Enum.any?(package_refs) do
         generate_built_skill(
           igniter,
           skill_name,
           skill_dir,
-          resolved_packages,
+          package_refs,
           all_expanded,
           custom_description
         )
@@ -829,16 +825,52 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
+    # Per-package reference model, ordered to match usage_rules: config order.
+    # Packages that contribute neither a main rule nor sub-rules are omitted.
+    defp build_package_refs(igniter, all_expanded) do
+      all_expanded
+      |> Enum.map(fn {pkg_name, package_path, _mode} ->
+        %{
+          package: pkg_name,
+          pkg_dir: to_string(pkg_name),
+          path: package_path,
+          main: Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")),
+          subs: find_available_sub_rules(igniter, package_path)
+        }
+      end)
+      |> Enum.filter(fn %{main: main, subs: subs} -> main or Enum.any?(subs) end)
+    end
+
+    # All reference file paths this skill should contain, as {pkg_ref, ref_path}.
+    # Single source of truth for both the writer and the stale-cleanup scanner.
+    defp reference_paths(skill_dir, package_refs) do
+      Enum.flat_map(package_refs, fn %{package: pkg_name, pkg_dir: pkg_dir} = pkg_ref ->
+        main_paths =
+          if pkg_ref.main,
+            do: [
+              {pkg_ref, :main, Path.join([skill_dir, "references", pkg_dir, "#{pkg_name}.md"])}
+            ],
+            else: []
+
+        sub_paths =
+          Enum.map(pkg_ref.subs, fn sub ->
+            {pkg_ref, {:sub, sub}, Path.join([skill_dir, "references", pkg_dir, "#{sub}.md"])}
+          end)
+
+        main_paths ++ sub_paths
+      end)
+    end
+
     defp generate_built_skill(
            igniter,
            skill_name,
            skill_dir,
-           resolved_packages,
+           package_refs,
            all_expanded,
            custom_description
          ) do
       skill_md =
-        build_skill_md(igniter, skill_name, resolved_packages, all_expanded, custom_description)
+        build_skill_md(skill_name, package_refs, all_expanded, custom_description)
 
       igniter =
         Igniter.create_or_update_file(
@@ -852,45 +884,90 @@ if Code.ensure_loaded?(Igniter) do
           end
         )
 
-      # Reference files for sub-rules and main rules from all packages
-      Enum.reduce(resolved_packages, igniter, fn {pkg_name, package_path, _mode}, acc ->
-        # Create reference file for main usage-rules.md
-        acc =
-          case read_dep_content(acc, Path.join(package_path, "usage-rules.md")) do
-            "" ->
-              acc
+      ref_entries = reference_paths(skill_dir, package_refs)
+      igniter = remove_stale_references(igniter, skill_dir, ref_entries)
 
-            content ->
-              ref_path = Path.join([skill_dir, "references", "#{pkg_name}.md"])
-
-              Igniter.create_or_update_file(
-                acc,
-                ref_path,
-                content,
-                fn source -> update_source_content(source, content) end
-              )
-          end
-
-        sub_rules = find_available_sub_rules(acc, package_path)
-
-        Enum.reduce(sub_rules, acc, fn sub_rule, inner_acc ->
-          sub_path = Path.join([package_path, "usage-rules", "#{sub_rule}.md"])
-          content = read_dep_content(inner_acc, sub_path)
-          ref_path = Path.join([skill_dir, "references", "#{sub_rule}.md"])
+      # Write reference files under references/<pkg>/ to avoid cross-package collisions.
+      Enum.reduce(ref_entries, igniter, fn
+        {pkg_ref, :main, ref_path}, acc ->
+          content = read_dep_content(acc, Path.join(pkg_ref.path, "usage-rules.md"))
 
           Igniter.create_or_update_file(
-            inner_acc,
+            acc,
             ref_path,
             content,
             fn source -> update_source_content(source, content) end
           )
-        end)
+
+        {pkg_ref, {:sub, sub_rule}, ref_path}, acc ->
+          content =
+            read_dep_content(acc, Path.join([pkg_ref.path, "usage-rules", "#{sub_rule}.md"]))
+
+          Igniter.create_or_update_file(
+            acc,
+            ref_path,
+            content,
+            fn source -> update_source_content(source, content) end
+          )
       end)
     end
 
-    defp build_skill_md(igniter, skill_name, resolved_packages, all_expanded, custom_description) do
+    # Remove reference files that aren't part of the new per-package layout.
+    # Covers flat-layout files from older syncs and orphaned per-package dirs.
+    defp remove_stale_references(igniter, skill_dir, ref_entries) do
+      refs_dir = Path.join(skill_dir, "references")
+      expected = MapSet.new(ref_entries, fn {_pkg_ref, _tag, path} -> path end)
+
+      # Igniter may have files created in this sync that don't exist on disk yet,
+      # so we union rewrite sources with a disk walk to catch both.
+      source_paths =
+        igniter.rewrite.sources
+        |> Enum.map(&elem(&1, 0))
+        |> Enum.filter(fn path ->
+          String.starts_with?(path, refs_dir <> "/") && String.ends_with?(path, ".md")
+        end)
+
+      # Files present on disk but not yet loaded — walk one level of
+      # subdirectories so both flat and nested layouts are caught.
+      disk_paths =
+        case File.ls(refs_dir) do
+          {:ok, entries} ->
+            Enum.flat_map(entries, fn entry ->
+              full = Path.join(refs_dir, entry)
+
+              cond do
+                File.regular?(full) and String.ends_with?(entry, ".md") ->
+                  [full]
+
+                File.dir?(full) ->
+                  case File.ls(full) do
+                    {:ok, sub_entries} ->
+                      sub_entries
+                      |> Enum.filter(&String.ends_with?(&1, ".md"))
+                      |> Enum.map(&Path.join(full, &1))
+
+                    {:error, _} ->
+                      []
+                  end
+
+                true ->
+                  []
+              end
+            end)
+
+          {:error, _} ->
+            []
+        end
+
+      (source_paths ++ disk_paths)
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(expected, &1))
+      |> Enum.reduce(igniter, fn path, acc -> Igniter.rm(acc, path) end)
+    end
+
+    defp build_skill_md(skill_name, package_refs, all_expanded, custom_description) do
       description =
-        (custom_description || build_skill_description(skill_name, resolved_packages))
+        (custom_description || build_skill_description(skill_name, package_refs))
         |> truncate_description()
 
       formatted_description = format_yaml_string(description)
@@ -906,7 +983,7 @@ if Code.ensure_loaded?(Igniter) do
         """
         |> String.trim_trailing()
 
-      body = build_skill_body(igniter, skill_name, resolved_packages, all_expanded)
+      body = build_skill_body(skill_name, package_refs, all_expanded)
 
       frontmatter <>
         "\n\n" <>
@@ -915,8 +992,8 @@ if Code.ensure_loaded?(Igniter) do
         "\n<!-- usage-rules-skill-end -->"
     end
 
-    defp build_skill_description(skill_name, resolved_packages) do
-      package_names = Enum.map(resolved_packages, &elem(&1, 0))
+    defp build_skill_description(skill_name, package_refs) do
+      package_names = Enum.map(package_refs, & &1.package)
 
       descriptions =
         package_names
@@ -931,38 +1008,30 @@ if Code.ensure_loaded?(Igniter) do
       end
     end
 
-    defp build_skill_body(igniter, _skill_name, resolved_packages, all_expanded) do
+    defp build_skill_body(_skill_name, package_refs, all_expanded) do
       sections = []
 
-      # Sub-rules as references (only from packages with usage rules)
-      all_sub_rules =
-        Enum.flat_map(resolved_packages, fn {_pkg_name, package_path, _mode} ->
-          find_available_sub_rules(igniter, package_path)
+      # Group main + sub-rule references per package so users (and LLMs) can
+      # tell which library each reference came from, and so that same-named
+      # sub-rules from different packages don't collide on disk.
+      package_blocks =
+        Enum.map(package_refs, fn %{package: pkg_name, pkg_dir: pkg_dir} = pkg_ref ->
+          main_line =
+            if pkg_ref.main,
+              do: ["- [#{pkg_name}](references/#{pkg_dir}/#{pkg_name}.md)"],
+              else: []
+
+          sub_lines =
+            Enum.map(pkg_ref.subs, fn sub ->
+              "- [#{sub}](references/#{pkg_dir}/#{sub}.md)"
+            end)
+
+          Enum.join(["### #{pkg_name}", "" | main_line ++ sub_lines], "\n")
         end)
-
-      # Only include main rule links for packages that have a main usage-rules.md
-      # (a package may pass the filter via sub-rules alone, with no main file)
-      all_main_rules =
-        resolved_packages
-        |> Enum.filter(fn {_pkg_name, package_path, _mode} ->
-          read_dep_content(igniter, Path.join(package_path, "usage-rules.md")) != ""
-        end)
-        |> Enum.map(fn {pkg_name, _path, _mode} -> pkg_name end)
-
-      all_references =
-        Enum.map(all_sub_rules, fn sub_rule ->
-          "- [#{sub_rule}](references/#{sub_rule}.md)"
-        end) ++
-          Enum.map(all_main_rules, fn pkg_name ->
-            "- [#{pkg_name}](references/#{pkg_name}.md)"
-          end)
-
-      all_references = Enum.uniq(all_references)
 
       sections =
-        if Enum.any?(all_references) do
-          ref_lines = Enum.join(all_references, "\n")
-          sections ++ ["## Additional References\n\n#{ref_lines}"]
+        if Enum.any?(package_blocks) do
+          sections ++ ["## Additional References\n\n" <> Enum.join(package_blocks, "\n\n")]
         else
           sections
         end

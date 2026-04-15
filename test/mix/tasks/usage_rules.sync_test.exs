@@ -705,16 +705,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "---"
       assert content =~ "name: use-foo"
       assert content =~ "managed-by: usage-rules"
-      assert content =~ "[foo](references/foo.md)"
+      assert content =~ "### foo"
+      assert content =~ "[foo](references/foo/foo.md)"
       assert content =~ "mix usage_rules.search_docs"
 
-      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
       assert ref_content =~ "Foo Usage"
     end
 
@@ -735,14 +736,18 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/foo-and-bar/SKILL.md")
-        |> assert_creates(".claude/skills/foo-and-bar/references/foo.md")
-        |> assert_creates(".claude/skills/foo-and-bar/references/bar.md")
+        |> assert_creates(".claude/skills/foo-and-bar/references/foo/foo.md")
+        |> assert_creates(".claude/skills/foo-and-bar/references/bar/bar.md")
 
       content = file_content(igniter, ".claude/skills/foo-and-bar/SKILL.md")
-      assert content =~ "[foo](references/foo.md)"
-      assert content =~ "[bar](references/bar.md)"
+      assert content =~ "### foo"
+      assert content =~ "### bar"
+      assert content =~ "[foo](references/foo/foo.md)"
+      assert content =~ "[bar](references/bar/bar.md)"
       assert content =~ "-p foo"
       assert content =~ "-p bar"
+
+      assert :binary.match(content, "### foo") < :binary.match(content, "### bar")
     end
 
     test "builds skill with custom location" do
@@ -775,18 +780,19 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
-        |> assert_creates(".claude/skills/use-foo/references/testing.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
 
       skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert skill_content =~ "Additional References"
-      assert skill_content =~ "[foo](references/foo.md)"
-      assert skill_content =~ "[testing](references/testing.md)"
+      assert skill_content =~ "### foo"
+      assert skill_content =~ "[foo](references/foo/foo.md)"
+      assert skill_content =~ "[testing](references/foo/testing.md)"
 
-      ref_content = file_content(igniter, ".claude/skills/use-foo/references/testing.md")
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/testing.md")
       assert ref_content =~ "Testing Guide"
 
-      main_ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      main_ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
       assert main_ref_content =~ "Foo Usage"
     end
 
@@ -871,11 +877,11 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "My custom instructions"
-      assert content =~ "[foo](references/foo.md)"
+      assert content =~ "[foo](references/foo/foo.md)"
       assert content =~ "<!-- usage-rules-skill-start -->"
       refute content =~ "Old body"
 
-      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
       assert ref_content =~ "Updated content."
     end
 
@@ -934,14 +940,14 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/use-ash/SKILL.md")
-        |> assert_creates(".claude/skills/use-ash/references/ash.md")
-        |> assert_creates(".claude/skills/use-ash/references/ash_postgres.md")
-        |> assert_creates(".claude/skills/use-ash/references/ash_json_api.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash/ash.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash_postgres/ash_postgres.md")
+        |> assert_creates(".claude/skills/use-ash/references/ash_json_api/ash_json_api.md")
 
       content = file_content(igniter, ".claude/skills/use-ash/SKILL.md")
-      assert content =~ "[ash](references/ash.md)"
-      assert content =~ "[ash_postgres](references/ash_postgres.md)"
-      assert content =~ "[ash_json_api](references/ash_json_api.md)"
+      assert content =~ "[ash](references/ash/ash.md)"
+      assert content =~ "[ash_postgres](references/ash_postgres/ash_postgres.md)"
+      assert content =~ "[ash_json_api](references/ash_json_api/ash_json_api.md)"
       refute content =~ "Req"
     end
 
@@ -962,21 +968,22 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/phoenix-framework/SKILL.md")
-        |> assert_creates(".claude/skills/phoenix-framework/references/ecto.md")
-        |> assert_creates(".claude/skills/phoenix-framework/references/liveview.md")
+        |> assert_creates(".claude/skills/phoenix-framework/references/phoenix/ecto.md")
+        |> assert_creates(".claude/skills/phoenix-framework/references/phoenix/liveview.md")
 
       content = file_content(igniter, ".claude/skills/phoenix-framework/SKILL.md")
 
-      # Sub-rule references are included
-      assert content =~ "[ecto](references/ecto.md)"
-      assert content =~ "[liveview](references/liveview.md)"
+      # Sub-rule references are included under the phoenix package heading
+      assert content =~ "### phoenix"
+      assert content =~ "[ecto](references/phoenix/ecto.md)"
+      assert content =~ "[liveview](references/phoenix/liveview.md)"
 
-      # Deps without usage rules should NOT have reference links
-      refute content =~ "references/phoenix_ecto.md"
-      refute content =~ "references/phoenix_html.md"
+      # Deps without usage rules should NOT have reference links or package dirs
+      refute content =~ "references/phoenix_ecto/"
+      refute content =~ "references/phoenix_html/"
 
       # Package with only sub-rules (no main usage-rules.md) should NOT have a main reference link
-      refute content =~ "[phoenix](references/phoenix.md)"
+      refute content =~ "[phoenix](references/phoenix/phoenix.md)"
 
       # But search docs should include ALL matched deps (they have hexdocs regardless)
       assert content =~ "-p phoenix_ecto"
@@ -1003,20 +1010,23 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/ash-framework/SKILL.md")
-        |> assert_creates(".claude/skills/ash-framework/references/ash.md")
-        |> assert_creates(".claude/skills/ash-framework/references/migrations.md")
+        |> assert_creates(".claude/skills/ash-framework/references/ash/ash.md")
+        |> assert_creates(".claude/skills/ash-framework/references/ash_postgres/migrations.md")
 
       content = file_content(igniter, ".claude/skills/ash-framework/SKILL.md")
 
-      # ash has main usage-rules.md → gets a reference link
-      assert content =~ "[ash](references/ash.md)"
+      # ash has main usage-rules.md → gets its own H3 + main reference link
+      assert content =~ "### ash"
+      assert content =~ "[ash](references/ash/ash.md)"
 
-      # ash_postgres has sub-rules → sub-rule link present, but no main link
-      assert content =~ "[migrations](references/migrations.md)"
-      refute content =~ "[ash_postgres](references/ash_postgres.md)"
+      # ash_postgres has sub-rules → H3 present with sub-rule link, but no main link
+      assert content =~ "### ash_postgres"
+      assert content =~ "[migrations](references/ash_postgres/migrations.md)"
+      refute content =~ "[ash_postgres](references/ash_postgres/ash_postgres.md)"
 
-      # ash_oban has no usage rules → no reference link at all
-      refute content =~ "references/ash_oban.md"
+      # ash_oban has no usage rules → no H3, no reference dir
+      refute content =~ "### ash_oban"
+      refute content =~ "references/ash_oban/"
 
       # Search docs include all matched deps
       assert content =~ "-p ash"
@@ -1116,16 +1126,203 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/my-skill/SKILL.md")
-        |> assert_creates(".claude/skills/my-skill/references/phoenix.md")
-        |> assert_creates(".claude/skills/my-skill/references/liveview.md")
+        |> assert_creates(".claude/skills/my-skill/references/phoenix/phoenix.md")
+        |> assert_creates(".claude/skills/my-skill/references/phoenix/liveview.md")
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
 
       assert skill_content =~ "Additional References"
-      assert skill_content =~ "[liveview](references/liveview.md)"
+      assert skill_content =~ "### phoenix"
+      assert skill_content =~ "[liveview](references/phoenix/liveview.md)"
 
-      # phoenix sub-rule + phoenix package should produce only one reference
-      assert [_] = Regex.scan(~r"\[phoenix\]\(references/phoenix\.md\)", skill_content)
+      # phoenix sub-rule appears exactly once (package has no main usage-rules.md,
+      # so there's no package-level [phoenix] link to collide with the sub-rule)
+      assert [_] =
+               Regex.scan(
+                 ~r"\[phoenix\]\(references/phoenix/phoenix\.md\)",
+                 skill_content
+               )
+    end
+
+    test "cross-package sub-rule name collision keeps both references" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash/usage-rules/multitenancy.md" => "# Ash Multitenancy\n\nAsh's take.",
+          "deps/ash_oban/usage-rules.md" => "# Ash Oban",
+          "deps/ash_oban/usage-rules/multitenancy.md" => "# Oban Multitenancy\n\nOban's take."
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "ash-framework": [usage_rules: [:ash, :ash_oban]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/ash-framework/SKILL.md")
+        |> assert_creates(".claude/skills/ash-framework/references/ash/multitenancy.md")
+        |> assert_creates(".claude/skills/ash-framework/references/ash_oban/multitenancy.md")
+
+      # Both files exist with distinct content — the silent overwrite is gone
+      ash_multi =
+        file_content(igniter, ".claude/skills/ash-framework/references/ash/multitenancy.md")
+
+      oban_multi =
+        file_content(igniter, ".claude/skills/ash-framework/references/ash_oban/multitenancy.md")
+
+      assert ash_multi =~ "Ash's take."
+      assert oban_multi =~ "Oban's take."
+      refute ash_multi == oban_multi
+
+      content = file_content(igniter, ".claude/skills/ash-framework/SKILL.md")
+      assert content =~ "### ash"
+      assert content =~ "### ash_oban"
+      assert content =~ "[multitenancy](references/ash/multitenancy.md)"
+      assert content =~ "[multitenancy](references/ash_oban/multitenancy.md)"
+    end
+
+    test "package with only sub-rules still gets an H3 heading" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/testing.md" => "# Testing"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [:foo]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "### foo"
+      assert content =~ "[testing](references/foo/testing.md)"
+      # No main rule link because deps/foo/usage-rules.md does not exist
+      refute content =~ "[foo](references/foo/foo.md)"
+    end
+
+    test "H3 headings appear in the config order of usage_rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/zebra/usage-rules.md" => "# Zebra",
+          "deps/alpha/usage-rules.md" => "# Alpha",
+          "deps/middle/usage-rules.md" => "# Middle"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              ordered: [usage_rules: [:zebra, :alpha, :middle]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/ordered/SKILL.md")
+
+      content = file_content(igniter, ".claude/skills/ordered/SKILL.md")
+
+      # Headings appear in exactly the order declared in the config.
+      {zebra_idx, _} = :binary.match(content, "### zebra")
+      {alpha_idx, _} = :binary.match(content, "### alpha")
+      {middle_idx, _} = :binary.match(content, "### middle")
+
+      assert zebra_idx < alpha_idx
+      assert alpha_idx < middle_idx
+    end
+
+    test "stale flat-layout reference files are cleaned up on re-sync" do
+      # Pre-seed an old-layout reference file as if an earlier version of
+      # usage_rules had written it. The sync should remove it and write the
+      # new per-package layout instead.
+      stale_skill_md =
+        "---\nname: use-foo\ndescription: \"Foo skill\"\nmetadata:\n  managed-by: usage-rules\n---\n\n<!-- usage-rules-skill-start -->\n## Additional References\n\n- [foo](references/foo.md)\n<!-- usage-rules-skill-end -->"
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          ".claude/skills/use-foo/SKILL.md" => stale_skill_md,
+          ".claude/skills/use-foo/references/foo.md" => "# Old flat-layout content"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [:foo]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
+
+      # Old flat-layout file removed
+      refute Map.has_key?(
+               igniter.rewrite.sources,
+               ".claude/skills/use-foo/references/foo.md"
+             )
+
+      # New nested content written with fresh package content
+      ref =
+        file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
+
+      assert ref =~ "Foo Rules"
+
+      # SKILL.md points at the new location
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "[foo](references/foo/foo.md)"
+      refute content =~ "[foo](references/foo.md)"
+    end
+
+    test "per-package reference directory is removed when package leaves the skill" do
+      # First sync: build a skill containing both foo and bar
+      config_both = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            combo: [usage_rules: [:foo, :bar]]
+          ]
+        ]
+      ]
+
+      config_foo_only = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            combo: [usage_rules: [:foo]]
+          ]
+        ]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo",
+          "deps/bar/usage-rules.md" => "# Bar"
+        })
+        |> sync(config_both)
+        |> assert_creates(".claude/skills/combo/references/foo/foo.md")
+        |> assert_creates(".claude/skills/combo/references/bar/bar.md")
+        |> apply_igniter!()
+
+      # Second sync drops bar from the build
+      igniter =
+        igniter
+        |> sync(config_foo_only)
+
+      # bar's reference file is gone; foo's remains
+      refute Map.has_key?(
+               igniter.rewrite.sources,
+               ".claude/skills/combo/references/bar/bar.md"
+             )
+
+      assert Map.has_key?(
+               igniter.rewrite.sources,
+               ".claude/skills/combo/references/foo/foo.md"
+             )
+
+      content = file_content(igniter, ".claude/skills/combo/SKILL.md")
+      refute content =~ "### bar"
+      refute content =~ "references/bar/"
     end
   end
 
@@ -1137,14 +1334,14 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(skills: [location: ".claude/skills", deps: [:foo]])
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
 
       content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
       assert content =~ "name: use-foo"
       assert content =~ "managed-by: usage-rules"
-      assert content =~ "[foo](references/foo.md)"
+      assert content =~ "[foo](references/foo/foo.md)"
 
-      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
       assert ref_content =~ "Foo Usage"
     end
 
@@ -1177,8 +1374,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         |> assert_creates(".claude/skills/foo-and-bar/SKILL.md")
 
       combo_content = file_content(igniter, ".claude/skills/foo-and-bar/SKILL.md")
-      assert combo_content =~ "[foo](references/foo.md)"
-      assert combo_content =~ "[bar](references/bar.md)"
+      assert combo_content =~ "[foo](references/foo/foo.md)"
+      assert combo_content =~ "[bar](references/bar/bar.md)"
     end
 
     test "supports regex to match multiple deps" do
@@ -1247,7 +1444,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert agents_content =~ "bar"
 
       skill_content = file_content(igniter, ".claude/skills/use-bar/SKILL.md")
-      assert skill_content =~ "[bar](references/bar.md)"
+      assert skill_content =~ "[bar](references/bar/bar.md)"
     end
   end
 
@@ -1278,21 +1475,21 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
             ]
           )
           |> assert_creates(".claude/skills/my-skill/SKILL.md")
-          |> assert_creates(".claude/skills/my-skill/references/foo.md")
-          |> assert_creates(".claude/skills/my-skill/references/bar.md")
+          |> assert_creates(".claude/skills/my-skill/references/foo/foo.md")
+          |> assert_creates(".claude/skills/my-skill/references/bar/bar.md")
         end)
 
       assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
-      # Both foo and bar should be reference links
-      assert skill_content =~ "[foo](references/foo.md)"
-      assert skill_content =~ "[bar](references/bar.md)"
+      # Both foo and bar should be reference links under per-package dirs
+      assert skill_content =~ "[foo](references/foo/foo.md)"
+      assert skill_content =~ "[bar](references/bar/bar.md)"
 
-      foo_ref = file_content(igniter, ".claude/skills/my-skill/references/foo.md")
+      foo_ref = file_content(igniter, ".claude/skills/my-skill/references/foo/foo.md")
       assert foo_ref =~ "Foo Rules"
 
-      bar_ref = file_content(igniter, ".claude/skills/my-skill/references/bar.md")
+      bar_ref = file_content(igniter, ".claude/skills/my-skill/references/bar/bar.md")
       assert bar_ref =~ "Bar Rules"
     end
 
@@ -1313,17 +1510,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
             ]
           )
           |> assert_creates(".claude/skills/ash-expert/SKILL.md")
-          |> assert_creates(".claude/skills/ash-expert/references/ash.md")
-          |> assert_creates(".claude/skills/ash-expert/references/ash_postgres.md")
-          |> assert_creates(".claude/skills/ash-expert/references/ash_json_api.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash/ash.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash_postgres/ash_postgres.md")
+          |> assert_creates(".claude/skills/ash-expert/references/ash_json_api/ash_json_api.md")
         end)
 
       assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/ash-expert/SKILL.md")
-      assert skill_content =~ "[ash](references/ash.md)"
-      assert skill_content =~ "[ash_postgres](references/ash_postgres.md)"
-      assert skill_content =~ "[ash_json_api](references/ash_json_api.md)"
+      assert skill_content =~ "[ash](references/ash/ash.md)"
+      assert skill_content =~ "[ash_postgres](references/ash_postgres/ash_postgres.md)"
+      assert skill_content =~ "[ash_json_api](references/ash_json_api/ash_json_api.md)"
     end
 
     test "deps config with {:dep, :reference} still works" do
@@ -1334,15 +1531,15 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           })
           |> sync(skills: [location: ".claude/skills", deps: [{:foo, :reference}]])
           |> assert_creates(".claude/skills/use-foo/SKILL.md")
-          |> assert_creates(".claude/skills/use-foo/references/foo.md")
+          |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
         end)
 
       assert output =~ "deprecated in usage_rules skill config"
 
       skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
-      assert skill_content =~ "[foo](references/foo.md)"
+      assert skill_content =~ "[foo](references/foo/foo.md)"
 
-      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo.md")
+      ref_content = file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md")
       assert ref_content =~ "Foo Rules"
     end
 
@@ -1355,9 +1552,13 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           })
           |> sync(skills: [location: ".claude/skills", deps: [{~r/^ash_/, :reference}]])
           |> assert_creates(".claude/skills/use-ash-postgres/SKILL.md")
-          |> assert_creates(".claude/skills/use-ash-postgres/references/ash_postgres.md")
+          |> assert_creates(
+            ".claude/skills/use-ash-postgres/references/ash_postgres/ash_postgres.md"
+          )
           |> assert_creates(".claude/skills/use-ash-json-api/SKILL.md")
-          |> assert_creates(".claude/skills/use-ash-json-api/references/ash_json_api.md")
+          |> assert_creates(
+            ".claude/skills/use-ash-json-api/references/ash_json_api/ash_json_api.md"
+          )
         end)
 
       assert output =~ "deprecated in usage_rules skill config"
@@ -1400,15 +1601,17 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           ]
         )
         |> assert_creates(".claude/skills/my-skill/SKILL.md")
-        |> assert_creates(".claude/skills/my-skill/references/foo.md")
-        |> assert_creates(".claude/skills/my-skill/references/testing.md")
-        |> assert_creates(".claude/skills/my-skill/references/bar.md")
+        |> assert_creates(".claude/skills/my-skill/references/foo/foo.md")
+        |> assert_creates(".claude/skills/my-skill/references/foo/testing.md")
+        |> assert_creates(".claude/skills/my-skill/references/bar/bar.md")
 
       skill_content = file_content(igniter, ".claude/skills/my-skill/SKILL.md")
       assert skill_content =~ "Additional References"
-      assert skill_content =~ "[foo](references/foo.md)"
-      assert skill_content =~ "[testing](references/testing.md)"
-      assert skill_content =~ "[bar](references/bar.md)"
+      assert skill_content =~ "### foo"
+      assert skill_content =~ "### bar"
+      assert skill_content =~ "[foo](references/foo/foo.md)"
+      assert skill_content =~ "[testing](references/foo/testing.md)"
+      assert skill_content =~ "[bar](references/bar/bar.md)"
     end
   end
 
@@ -1625,8 +1828,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(config)
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
-        |> assert_creates(".claude/skills/use-foo/references/bar.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/bar/bar.md")
         |> apply_igniter!()
         |> simulate_disk_roundtrip()
 
@@ -1694,8 +1897,8 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(config)
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
-        |> assert_creates(".claude/skills/use-foo/references/testing.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
         |> apply_igniter!()
         |> simulate_disk_roundtrip()
 
@@ -1724,7 +1927,7 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         })
         |> sync(config)
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
-        |> assert_creates(".claude/skills/use-foo/references/foo.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
         |> apply_igniter!()
 
       # Inject custom content between frontmatter and managed section
