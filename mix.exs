@@ -54,7 +54,8 @@ defmodule UsageRules.MixProject do
       source_ref: "v#{@version}",
       extra_section: "GUIDES",
       extras: [
-        {"README.md", title: "Home"}
+        {"README.md", title: "Home"},
+        "CHANGELOG.md"
       ],
       before_closing_head_tag: fn type ->
         if type == :html do
