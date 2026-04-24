@@ -43,6 +43,10 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
 
   @impl true
   def run(args) do
+    if Mix.Project.get() do
+      loadpaths!()
+    end
+
     {:ok, _} = Application.ensure_all_started(:req)
     {opts, args} = OptionParser.parse!(args, strict: @switches, aliases: @aliases)
     opts = Keyword.put(opts, :mix_project, !!Mix.Project.get())
@@ -432,6 +436,19 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
   rescue
     _ ->
       false
+  end
+
+  defp loadpaths! do
+    args = [
+      "--no-elixir-version-check",
+      "--no-deps-check",
+      "--no-archives-check",
+      "--no-listeners"
+    ]
+
+    Mix.Task.run("loadpaths", args)
+    Mix.Task.reenable("loadpaths")
+    Mix.Task.reenable("deps.loadpaths")
   end
 
   @spec raise_bad_args!() :: no_return()
