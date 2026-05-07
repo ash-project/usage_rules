@@ -66,6 +66,22 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         String.contains?(issue, "link must be :at or :markdown")
       end)
     end
+
+    test "errors on invalid except option" do
+      project_with_deps()
+      |> sync(file: "AGENTS.md", usage_rules: [{:foo, except: "not_a_list"}])
+      |> assert_has_issue(fn issue ->
+        String.contains?(issue, ":except must be a list or omitted")
+      end)
+    end
+
+    test "errors on invalid except list elements" do
+      project_with_deps()
+      |> sync(file: "AGENTS.md", usage_rules: [{:foo, except: [1, 2]}])
+      |> assert_has_issue(fn issue ->
+        String.contains?(issue, ":except must be a list of string or atom")
+      end)
+    end
   end
 
   describe "inline sync" do
@@ -364,6 +380,62 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "[foo usage rules]"
       assert content =~ "[foo:ecto usage rules](deps/foo/usage-rules/ecto.md)"
     end
+
+    test "except option drops named sub-rules but keeps main and other subs" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{:foo, except: ["testing"]}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      assert content =~ "Foo Ecto"
+      refute content =~ "Foo Testing"
+    end
+
+    test "except applies to explicit sub_rules list" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/foo/usage-rules/testing.md" => "# Foo Testing"
+        })
+        |> sync(
+          file: "AGENTS.md",
+          usage_rules: [{:foo, sub_rules: ["ecto", "testing"], except: ["ecto"]}]
+        )
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      refute content =~ "Foo Ecto"
+      assert content =~ "Foo Testing"
+    end
+
+    test "{:all, except: ...} applies to every package" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Main",
+          "deps/foo/usage-rules/ecto.md" => "# Foo Ecto",
+          "deps/bar/usage-rules.md" => "# Bar Main",
+          "deps/bar/usage-rules/ecto.md" => "# Bar Ecto"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: {:all, except: ["ecto"]})
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Main"
+      assert content =~ "Bar Main"
+      refute content =~ "Foo Ecto"
+      refute content =~ "Bar Ecto"
+    end
   end
 
   describe "regex in usage_rules" do
@@ -471,6 +543,22 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
           "deps/ash/usage-rules/testing.md" => "# Ash Testing"
         })
         |> sync(file: "AGENTS.md", usage_rules: [{~r/^ash/, sub_rules: ["ecto"]}])
+        |> assert_creates("AGENTS.md")
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Ash Core"
+      assert content =~ "Ash Ecto"
+      refute content =~ "Ash Testing"
+    end
+
+    test "regex with except option excludes sub-rules" do
+      igniter =
+        project_with_deps(%{
+          "deps/ash/usage-rules.md" => "# Ash Core",
+          "deps/ash/usage-rules/ecto.md" => "# Ash Ecto",
+          "deps/ash/usage-rules/testing.md" => "# Ash Testing"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [{~r/^ash/, except: ["testing"]}])
         |> assert_creates("AGENTS.md")
 
       content = file_content(igniter, "AGENTS.md")
