@@ -39,10 +39,10 @@ defmodule Mix.Tasks.UsageRules.ListTest do
       assert output =~ @builtin_note_prefix
     end
 
-    test "filters by dependency name (colon, case)", %{tmp_dir: dir} do
+    test "filters by dependency name (case-insensitive string)", %{tmp_dir: dir} do
       app = fixture_app!(dir, phx_style: :sub_rules)
 
-      for argv <- [["phx_style"], ["Phx_Style"], [":phx_style"]] do
+      for argv <- [["phx_style"], ["Phx_Style"]] do
         output =
           Mix.Project.in_project(app, dir, fn _ ->
             capture_io(fn -> List.run(argv) end)
@@ -100,6 +100,16 @@ defmodule Mix.Tasks.UsageRules.ListTest do
       assert_raise Mix.Error, ~r/No dependency matching/, fn ->
         Mix.Project.in_project(app, dir, fn _ ->
           List.run(["not_a_real_dependency_xyz"])
+        end)
+      end
+    end
+
+    test "raises when filter uses atom-style colon prefix (not accepted)", %{tmp_dir: dir} do
+      app = fixture_app!(dir, phx_style: :sub_rules)
+
+      assert_raise Mix.Error, ~r/No dependency matching/, fn ->
+        Mix.Project.in_project(app, dir, fn _ ->
+          List.run([":phx_style"])
         end)
       end
     end
