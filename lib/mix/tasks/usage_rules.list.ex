@@ -13,12 +13,15 @@ defmodule Mix.Tasks.UsageRules.List do
   Sub-rules are the basenames of `deps/<app>/usage-rules/*.md` (excluding `skills/` trees),
   consistent with `mix usage_rules.sync`.
 
+  Two errors can be raised normally. First is if the dependency is not in the project,
+  then the "No dependency matching..." error will occur.
+  The second error is if you have more than one argument. Only one dependency may be filtered at one time.
+
   ## Examples
 
       $ mix usage_rules.list
 
       $ mix usage_rules.list ash
-      $ mix usage_rules.list :phoenix
   """
 
   @impl Mix.Task
@@ -69,7 +72,6 @@ defmodule Mix.Tasks.UsageRules.List do
   defp package_filter([one]) do
     one
     |> String.trim()
-    |> String.trim_leading(":")
   end
 
   defp package_filter(_) do
