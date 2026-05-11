@@ -185,24 +185,46 @@ if Code.ensure_loaded?(Igniter) do
            #{__MODULE__.Docs.code_sample(4)}
            """}
 
-        (link_error = validate_link_options(config[:usage_rules])) != nil ->
-          {:error, link_error}
+        (spec_error = validate_usage_rules_specs(config[:usage_rules])) != nil ->
+          {:error, spec_error}
 
         true ->
           :ok
       end
     end
 
+    defp validate_usage_rules_specs(usage_rules) do
+      validate_link_options(usage_rules)
+    end
+
     defp validate_link_options(nil), do: nil
     defp validate_link_options(:all), do: nil
 
-    defp validate_link_options({:all, opts}) when is_list(opts), do: validate_link_option(opts)
+    defp validate_link_options({:all, opts}) when is_list(opts) do
+      validate_spec_options(opts)
+    end
 
     defp validate_link_options(specs) when is_list(specs) do
-      Enum.find_value(specs, fn
-        {_inner, opts} when is_list(opts) -> validate_link_option(opts)
-        _ -> nil
+      Enum.find_value(specs, fn spec ->
+        case spec do
+          {_inner, opts} when is_list(opts) ->
+            validate_spec_options(opts)
+
+          _ ->
+            case extract_regex_spec(spec) do
+              {_regex, opts} when is_list(opts) -> validate_spec_options(opts)
+              _ -> nil
+            end
+        end
       end)
+    end
+
+    defp validate_spec_options(opts) when is_list(opts) do
+      cond do
+        (err = validate_link_option(opts)) != nil -> err
+        (err = validate_except_option(opts)) != nil -> err
+        true -> nil
+      end
     end
 
     defp validate_link_option(opts) do
@@ -210,6 +232,23 @@ if Code.ensure_loaded?(Igniter) do
         nil -> nil
         style when style in [:at, :markdown] -> nil
         other -> "usage_rules link must be :at or :markdown, got: #{inspect(other)}"
+      end
+    end
+
+    defp validate_except_option(opts) do
+      case Keyword.get(opts, :except) do
+        nil ->
+          nil
+
+        list when is_list(list) ->
+          if Enum.all?(list, &(is_binary(&1) or is_atom(&1))) do
+            nil
+          else
+            "usage_rules :except must be a list of string or atom sub-rule names, got: #{inspect(list)}"
+          end
+
+        other ->
+          "usage_rules :except must be a list or omitted, got: #{inspect(other)}"
       end
     end
 
@@ -388,6 +427,7 @@ if Code.ensure_loaded?(Igniter) do
 
           sub_rules =
             find_available_sub_rules(igniter, package_path)
+            |> filter_sub_rules_by_except(opts)
             |> Enum.map(fn sub_rule_name ->
               {package_name, package_path, sub_rule_name, opts}
             end)
@@ -445,10 +485,11 @@ if Code.ensure_loaded?(Igniter) do
             case sub_rules_opt do
               :all ->
                 find_available_sub_rules(igniter, package_path)
+                |> filter_sub_rules_by_except(opts)
                 |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
 
               list when is_list(list) ->
-                Enum.flat_map(list, fn sr ->
+                Enum.flat_map(filter_sub_rules_by_except(list, opts), fn sr ->
                   sub_path = Path.join([package_path, "usage-rules", "#{sr}.md"])
 
                   if Igniter.exists?(igniter, sub_path) do
@@ -489,6 +530,7 @@ if Code.ensure_loaded?(Igniter) do
             :all ->
               subs =
                 find_available_sub_rules(igniter, package_path)
+                |> filter_sub_rules_by_except(opts)
                 |> Enum.map(fn sr -> {package_name, package_path, sr, opts} end)
 
               found = main ++ subs
@@ -505,7 +547,9 @@ if Code.ensure_loaded?(Igniter) do
 
             list when is_list(list) ->
               {subs, sub_errors} =
-                Enum.reduce(list, {[], []}, fn sr, {found_acc, err_acc} ->
+                Enum.reduce(filter_sub_rules_by_except(list, opts), {[], []}, fn sr,
+                                                                                 {found_acc,
+                                                                                  err_acc} ->
                   sub_path = Path.join([package_path, "usage-rules", "#{sr}.md"])
 
                   if Igniter.exists?(igniter, sub_path) do
@@ -565,6 +609,19 @@ if Code.ensure_loaded?(Igniter) do
     # -------------------------------------------------------------------
     # Sub-rule discovery
     # -------------------------------------------------------------------
+
+    defp except_sub_rule_set(opts) do
+      case Keyword.get(opts, :except) do
+        nil -> MapSet.new()
+        list when is_list(list) -> MapSet.new(Enum.map(list, &to_string/1))
+        _ -> MapSet.new()
+      end
+    end
+
+    defp filter_sub_rules_by_except(names, opts) when is_list(names) do
+      ex = except_sub_rule_set(opts)
+      Enum.reject(names, &MapSet.member?(ex, to_string(&1)))
+    end
 
     defp find_available_sub_rules(igniter, package_path) do
       usage_rules_dir = Path.join(package_path, "usage-rules")
