@@ -84,6 +84,8 @@ defp usage_rules do
 end
 ```
 
+> **Tip:** Many AI coding agents (Claude Code, Cursor, GitHub Copilot, Windsurf) use the `description:` value to decide when to auto-load the skill without manual invocation. Descriptions with specific, observable signals tend to work better than generic topic labels — e.g. `"Load when any file uses Ash.Resource or when debugging Ash.Error.Forbidden"` rather than `"Use when working with Ash resources."` File paths, error type names, and mix task names give agents precise matching cues.
+
 Then run:
 
 ```sh
