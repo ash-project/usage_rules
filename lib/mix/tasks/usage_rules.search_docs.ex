@@ -39,6 +39,13 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
   ]
   @aliases [p: :package, o: :output, e: :everywhere, q: :query_by]
 
+  # Packages whose documentation isn't hosted on hexdocs and therefore can't be searched. Rather
+  # than letting the request 404, we intercept these packages and point users to where their
+  # documentation actually lives.
+  @private_packages %{
+    "oban_pro" => "https://oban.pro/docs/pro"
+  }
+
   require Logger
 
   @impl true
@@ -61,6 +68,21 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
         [term | _args] -> term
       end
 
+    all_packages = Keyword.get(opts, :package, [])
+
+    {private_packages, public_packages} = Enum.split_with(all_packages, &private_package?/1)
+
+    Enum.each(private_packages, &notify_private_package/1)
+
+    if all_packages != [] and public_packages == [] do
+      :ok
+    else
+      opts = Keyword.put(opts, :package, public_packages)
+      search_hexdocs(term, opts)
+    end
+  end
+
+  defp search_hexdocs(term, opts) do
     filter_by =
       cond do
         opts[:everywhere] ->
@@ -110,6 +132,28 @@ defmodule Mix.Tasks.UsageRules.SearchDocs do
 
   defp maybe_add_filter(query_params, nil), do: query_params
   defp maybe_add_filter(query_params, filter_by), do: Map.put(query_params, :filter_by, filter_by)
+
+  defp private_package?(package) do
+    Map.has_key?(@private_packages, base_package_name(package))
+  end
+
+  defp notify_private_package(package) do
+    name = base_package_name(package)
+    url = Map.fetch!(@private_packages, name)
+
+    Mix.shell().info("""
+    The #{name} documentation is private and isn't hosted on hexdocs, so it
+    can't be searched. You can find its documentation at:
+
+        #{url}
+    """)
+  end
+
+  defp base_package_name(package) do
+    package
+    |> String.split("@", parts: 2)
+    |> hd()
+  end
 
   defp format_markdown_output(body, term, opts) do
     %{
