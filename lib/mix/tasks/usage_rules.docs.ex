@@ -22,8 +22,6 @@ defmodule Mix.Tasks.UsageRules.Docs do
       $ mix usage_rules.docs MyApp.User.Helpers
   """
 
-  require Logger
-
   @impl true
   def run([module = <<first, _::binary>>]) when first in ?A..?Z or first == ?: do
     loadpaths!()
