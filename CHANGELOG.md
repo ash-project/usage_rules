@@ -12,6 +12,25 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.2.7 (2026-07-26)
+
+
+
+
+### Bug Fixes:
+
+* handle package sub-rule conflicts in skill generation by Zach Daniel
+
+* Add CHANGELOG link from docs (#73) by Philip Munksgaard
+
+* disambiguate references in built skills (#71) by Philip Munksgaard
+
+### Improvements:
+
+* Special case docs search for private packages (#80) by Parker Selbert
+
+* adding except option and list option (#77) by ESmithByui
+
 ## v1.2.6 (2026-04-13)
 
 
