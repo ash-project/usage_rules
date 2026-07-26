@@ -172,6 +172,12 @@ Each entry in the `usage_rules` list can be:
 | `build` | `keyword` | Define custom composed skills from multiple packages' usage rules |
 | `package_skills` | `list` | Pull in pre-built skills shipped directly by packages. Supports atoms and regexes |
 
+A `build` entry's `usage_rules` list takes the same entry formats as the top-level
+`usage_rules` option — atoms, regexes, `"package:sub_rule"` strings, the `:elixir`
+and `:otp` builtins, and `{:package, main: false}` / `{:package, sub_rules: [...]}` /
+`{:package, except: [...]}` to narrow what a package contributes. The `link:` option
+has no effect: skills always write reference files.
+
 ## Usage Rules
 
 ### Sync all dependencies

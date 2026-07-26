@@ -886,16 +886,37 @@ if Code.ensure_loaded?(Igniter) do
     # Packages that contribute neither a main rule nor sub-rules are omitted.
     defp build_package_refs(igniter, all_expanded) do
       all_expanded
-      |> Enum.map(fn {pkg_name, package_path, _mode} ->
+      |> Enum.map(fn {pkg_name, package_path, opts} ->
         %{
           package: pkg_name,
           pkg_dir: to_string(pkg_name),
           path: package_path,
-          main: Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md")),
-          subs: find_available_sub_rules(igniter, package_path)
+          main: skill_includes_main?(igniter, package_path, opts),
+          subs: skill_sub_rules(igniter, package_path, opts)
         }
       end)
       |> Enum.filter(fn %{main: main, subs: subs} -> main or Enum.any?(subs) end)
+    end
+
+    defp skill_includes_main?(igniter, package_path, opts) do
+      opts[:main] != false &&
+        Igniter.exists?(igniter, Path.join(package_path, "usage-rules.md"))
+    end
+
+    defp skill_sub_rules(igniter, package_path, opts) do
+      case opts[:sub_rules] || :all do
+        :all ->
+          igniter
+          |> find_available_sub_rules(package_path)
+          |> filter_sub_rules_by_except(opts)
+
+        list when is_list(list) ->
+          list
+          |> filter_sub_rules_by_except(opts)
+          |> Enum.filter(fn sub_rule ->
+            Igniter.exists?(igniter, Path.join([package_path, "usage-rules", "#{sub_rule}.md"]))
+          end)
+      end
     end
 
     # All reference file paths this skill should contain, as {pkg_ref, ref_path}.
@@ -1383,42 +1404,89 @@ if Code.ensure_loaded?(Igniter) do
     defp expand_dep_specs(specs, all_deps) do
       Enum.flat_map(specs, fn
         {%Regex{} = regex, :reference} ->
-          IO.warn(
-            "{~r/.../, :reference} is deprecated in usage_rules skill config. " <>
-              "All packages are now automatically written as reference files. " <>
-              "Use the regex directly instead: ~r/#{Regex.source(regex)}/"
+          warn_deprecated_reference_spec(
+            "{~r/#{Regex.source(regex)}/, :reference}",
+            "~r/#{Regex.source(regex)}/"
           )
 
-          Enum.filter(all_deps, fn {name, _path} ->
-            Regex.match?(regex, to_string(name))
-          end)
-          |> Enum.map(fn {name, path} -> {name, path, :reference} end)
+          expand_regex_dep_spec(regex, [], all_deps)
 
         {pkg_name, :reference} when is_atom(pkg_name) ->
-          IO.warn(
-            "{:#{pkg_name}, :reference} is deprecated in usage_rules skill config. " <>
-              "All packages are now automatically written as reference files. " <>
-              "Use the atom directly instead: :#{pkg_name}"
-          )
+          warn_deprecated_reference_spec("{:#{pkg_name}, :reference}", ":#{pkg_name}")
+          expand_named_dep_spec(pkg_name, [], all_deps)
 
-          case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
-            nil -> []
-            {name, path} -> [{name, path, :reference}]
-          end
+        spec ->
+          case extract_regex_spec(spec) do
+            {%Regex{} = regex, opts} ->
+              expand_regex_dep_spec(regex, opts, all_deps)
 
-        %Regex{} = regex ->
-          Enum.filter(all_deps, fn {name, _path} ->
-            Regex.match?(regex, to_string(name))
-          end)
-          |> Enum.map(fn {name, path} -> {name, path, :reference} end)
-
-        pkg_name when is_atom(pkg_name) ->
-          case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
-            nil -> []
-            {name, path} -> [{name, path, :reference}]
+            nil ->
+              {pkg_name, opts} = parse_spec(spec)
+              expand_named_dep_spec(pkg_name, opts, all_deps)
           end
       end)
-      |> Enum.uniq_by(&elem(&1, 0))
+      |> merge_expanded_dep_specs()
+    end
+
+    defp warn_deprecated_reference_spec(old, new) do
+      IO.warn(
+        "#{old} is deprecated in usage_rules skill config. " <>
+          "All packages are now automatically written as reference files. " <>
+          "Use #{new} instead."
+      )
+    end
+
+    defp expand_regex_dep_spec(regex, opts, all_deps) do
+      all_deps
+      |> Enum.filter(fn {name, _path} -> Regex.match?(regex, to_string(name)) end)
+      |> Enum.map(fn {name, path} -> {name, path, opts} end)
+    end
+
+    defp expand_named_dep_spec(pkg_name, opts, all_deps) do
+      case Enum.find(all_deps, fn {name, _path} -> name == pkg_name end) do
+        nil -> []
+        {name, path} -> [{name, path, opts}]
+      end
+    end
+
+    # `:elixir` and `:otp` both alias sub-rules of `:usage_rules`, so specs can
+    # collide on a package — union their opts instead of keeping only the first.
+    defp merge_expanded_dep_specs(expanded) do
+      {order, by_name} =
+        Enum.reduce(expanded, {[], %{}}, fn {name, path, opts}, {order, by_name} ->
+          case Map.fetch(by_name, name) do
+            {:ok, {existing_path, existing_opts}} ->
+              {order,
+               Map.put(by_name, name, {existing_path, merge_dep_opts(existing_opts, opts)})}
+
+            :error ->
+              {order ++ [name], Map.put(by_name, name, {path, opts})}
+          end
+        end)
+
+      Enum.map(order, fn name ->
+        {path, opts} = Map.fetch!(by_name, name)
+        {name, path, opts}
+      end)
+    end
+
+    defp merge_dep_opts(left, right) do
+      sub_rules =
+        case {left[:sub_rules] || :all, right[:sub_rules] || :all} do
+          {:all, _} -> :all
+          {_, :all} -> :all
+          {left_subs, right_subs} -> Enum.uniq(left_subs ++ right_subs)
+        end
+
+      except =
+        MapSet.intersection(except_sub_rule_set(left), except_sub_rule_set(right))
+        |> MapSet.to_list()
+
+      [
+        main: left[:main] != false || right[:main] != false,
+        sub_rules: sub_rules,
+        except: except
+      ]
     end
 
     defp section_name_for(name, nil), do: to_string(name)

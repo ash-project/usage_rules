@@ -1412,6 +1412,125 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       refute content =~ "### bar"
       refute content =~ "references/bar/"
     end
+
+    test "main: false excludes the package's main usage-rules.md" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage",
+          "deps/foo/usage-rules/testing.md" => "# Testing Guide"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [{:foo, main: false}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/SKILL.md")
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
+
+      skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert skill_content =~ "[testing](references/foo/testing.md)"
+      refute skill_content =~ "[foo](references/foo/foo.md)"
+      refute Map.has_key?(igniter.rewrite.sources, ".claude/skills/use-foo/references/foo/foo.md")
+    end
+
+    test "except: drops the named sub-rules from the skill" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage",
+          "deps/foo/usage-rules/testing.md" => "# Testing Guide",
+          "deps/foo/usage-rules/html.md" => "# HTML Guide"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: [{:foo, except: ["html"]}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
+
+      skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert skill_content =~ "[testing](references/foo/testing.md)"
+      refute skill_content =~ "[html](references/foo/html.md)"
+
+      refute Map.has_key?(
+               igniter.rewrite.sources,
+               ".claude/skills/use-foo/references/foo/html.md"
+             )
+    end
+
+    test "a package:sub_rule spec includes only that sub-rule" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/testing.md" => "# Testing Guide",
+          "deps/foo/usage-rules/html.md" => "# HTML Guide"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-foo": [usage_rules: ["foo:testing"]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
+
+      skill_content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert skill_content =~ "[testing](references/foo/testing.md)"
+      refute skill_content =~ "[html](references/foo/html.md)"
+    end
+
+    test "builds a skill from the :elixir and :otp builtin aliases" do
+      igniter =
+        project_with_deps(%{
+          "deps/usage_rules/usage-rules.md" => "# Usage Rules",
+          "deps/usage_rules/usage-rules/elixir.md" => "# Elixir Rules",
+          "deps/usage_rules/usage-rules/otp.md" => "# OTP Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "elixir-core": [usage_rules: [:elixir, :otp]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/elixir-core/SKILL.md")
+        |> assert_creates(".claude/skills/elixir-core/references/usage_rules/elixir.md")
+        |> assert_creates(".claude/skills/elixir-core/references/usage_rules/otp.md")
+
+      skill_content = file_content(igniter, ".claude/skills/elixir-core/SKILL.md")
+      assert skill_content =~ "[elixir](references/usage_rules/elixir.md)"
+      assert skill_content =~ "[otp](references/usage_rules/otp.md)"
+    end
+
+    test "specs resolving to the same package combine rather than shadow each other" do
+      igniter =
+        project_with_deps(%{
+          "deps/usage_rules/usage-rules.md" => "# Usage Rules",
+          "deps/usage_rules/usage-rules/elixir.md" => "# Elixir Rules",
+          "deps/usage_rules/usage-rules/otp.md" => "# OTP Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "elixir-core": [usage_rules: [{:elixir, main: false}, {:otp, main: false}]]
+            ]
+          ]
+        )
+        |> assert_creates(".claude/skills/elixir-core/references/usage_rules/elixir.md")
+        |> assert_creates(".claude/skills/elixir-core/references/usage_rules/otp.md")
+
+      skill_content = file_content(igniter, ".claude/skills/elixir-core/SKILL.md")
+      assert skill_content =~ "[elixir](references/usage_rules/elixir.md)"
+      assert skill_content =~ "[otp](references/usage_rules/otp.md)"
+      refute skill_content =~ "[usage_rules](references/usage_rules/usage_rules.md)"
+    end
   end
 
   describe "skills.deps (auto-build shorthand)" do
@@ -1987,6 +2106,32 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
         |> assert_creates(".claude/skills/use-foo/SKILL.md")
         |> assert_creates(".claude/skills/use-foo/references/foo/foo.md")
         |> assert_creates(".claude/skills/use-foo/references/foo/testing.md")
+        |> apply_igniter!()
+        |> simulate_disk_roundtrip()
+
+      igniter
+      |> sync(config)
+      |> assert_unchanged()
+    end
+
+    test "second sync reports no changes when packages share a sub-rule name" do
+      config = [
+        skills: [
+          location: ".claude/skills",
+          build: [
+            "my-skill": [usage_rules: [:foo, :bar]]
+          ]
+        ]
+      ]
+
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules/migrations.md" => "# Foo Migrations",
+          "deps/bar/usage-rules/migrations.md" => "# Bar Migrations, no trailing newline"
+        })
+        |> sync(config)
+        |> assert_creates(".claude/skills/my-skill/references/foo/migrations.md")
+        |> assert_creates(".claude/skills/my-skill/references/bar/migrations.md")
         |> apply_igniter!()
         |> simulate_disk_roundtrip()
 
