@@ -428,6 +428,40 @@ Users enable these by listing the package in `skills: [package_skills: [...]]` i
 
 Make sure your `usage-rules/skills/` directory is included in your hex package's `files` option.
 
+### Validating references
+
+`mix usage_rules.validate` checks your usage rules for broken references before you publish them, so users' agents aren't pointed at functions that don't exist. It drives `ex_doc`'s own autolink pipeline over each file, exactly like an extra page in a docs build, and prints `ex_doc`'s own warnings with file/line information. Function references (`Module.function/arity`, `:erlang.function/arity`), explicit reference links, and relative file links are verified against your package, its dependencies, and Erlang/OTP the same way a docs build resolves them (only *documented* API validates). ex_doc must be compiled (it is already a dev dependency of most Hex packages); the task fails with an actionable error when it is not. Exit status is nonzero when any warning is emitted, so it can be used in CI.
+
+```sh
+# Validate your package's usage rules and sub-rules
+mix usage_rules.validate usage-rules.md usage-rules/*.md
+```
+
+Run with no arguments, it validates the files `mix usage_rules.sync` manages in the current project instead: the composed file from the `:file` config option, and `*.md` files under skills whose `SKILL.md` contains `managed-by: usage-rules`.
+
+The check is deliberately conservative: the warnings are exactly what a docs build emits, so `ex_doc` skips fenced code blocks, and stays silent about plain code span mentions that never resolve — such as `mix task` names and bare undefined module names — just like it does inside moduledocs.
+
+#### Zero-dependency alternative: validate as docs extras
+
+Since the files are validated exactly like documentation, you can get the same warnings from ex_doc alone, with no usage-rules involved: route them through the normal docs `extras` pipeline, the pattern endorsed in [elixir-lang/ex_doc#2272](https://github.com/elixir-lang/ex_doc/issues/2272). In your library's `mix.exs`, gate an `extras` entry on an environment variable:
+
+```elixir
+defp docs do
+  [
+    extras: [
+      {"README.md", title: "Home"},
+      "CHANGELOG.md"
+    ] ++ extra_docs()
+  ]
+end
+
+defp extra_docs do
+  if glob = System.get_env("EXTRA_DOCS"), do: Path.wildcard(glob), else: []
+end
+```
+
+Then run `mix docs` with `EXTRA_DOCS` set to a glob matching the files you want checked (e.g. `EXTRA_DOCS="{usage-rules.md,usage-rules/**/*.md}" mix docs`). Adding `warnings_as_errors: true` to the docs config makes it CI-friendly.
+
 ### Migrating from v0.1
 
 v0.2 replaces CLI arguments with project config. If you were running:
