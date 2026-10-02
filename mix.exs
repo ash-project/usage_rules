@@ -19,7 +19,7 @@ defmodule UsageRules.MixProject do
       elixir: "~> 1.18",
       package: package(),
       aliases: aliases(),
-      dialyzer: [plt_add_apps: [:mix, :iex]],
+      dialyzer: [plt_add_apps: [:mix, :iex, :ex_doc]],
       docs: &docs/0,
       description: @description,
       source_url: @source_url,
