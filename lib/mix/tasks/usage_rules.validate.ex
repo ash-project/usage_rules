@@ -26,12 +26,15 @@ defmodule Mix.Tasks.UsageRules.Validate do
     * `*.md` files under skills managed by usage-rules (skills whose
       `SKILL.md` contains `managed-by: usage-rules`)
 
-  Explicit file paths can also be given to validate those instead.
+  Explicit file paths or glob patterns can also be given to validate those
+  instead. Every argument must match at least one file; the task fails,
+  naming the argument, when one does not.
 
   ## Examples
 
       $ mix usage_rules.validate
       $ mix usage_rules.validate AGENTS.md usage-rules.md
+      $ mix usage_rules.validate "docs/**/*.md"
 
   ## Exit status
 
@@ -64,7 +67,7 @@ defmodule Mix.Tasks.UsageRules.Validate do
     files =
       case files do
         [] -> managed_files()
-        files -> files
+        patterns -> expand_patterns(patterns)
       end
 
     if files == [] do
@@ -80,6 +83,28 @@ defmodule Mix.Tasks.UsageRules.Validate do
       if result.warned? do
         exit({:shutdown, 1})
       end
+    end
+  end
+
+  # Each argument is a path or a glob. Shells pass a glob that matches nothing
+  # through literally, so expand it here; an argument that matches no regular
+  # file is an error rather than something to hand on to ex_doc.
+  defp expand_patterns(patterns) do
+    expanded =
+      Enum.map(patterns, fn pattern ->
+        if File.regular?(pattern) do
+          {pattern, [pattern]}
+        else
+          {pattern, Enum.filter(Path.wildcard(pattern), &File.regular?/1)}
+        end
+      end)
+
+    case for {pattern, []} <- expanded, do: pattern do
+      [] ->
+        expanded |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq()
+
+      unmatched ->
+        Mix.raise("No files matched: #{Enum.map_join(unmatched, ", ", &inspect/1)}\n\n#{usage()}")
     end
   end
 
