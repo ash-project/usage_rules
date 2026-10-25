@@ -12,6 +12,19 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.3.0 (2026-10-25)
+
+
+
+
+### Features:
+
+* add mix usage_rules.validate for reference validation (#88) by Luke Galea
+
+### Bug Fixes:
+
+* raise a clear error when a validate argument matches no files (#90) by Luke Galea
+
 ## v1.2.8 (2026-09-07)
 
 
