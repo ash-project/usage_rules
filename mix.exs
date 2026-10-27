@@ -94,8 +94,10 @@ defmodule UsageRules.MixProject do
       {:jason, "~> 1.0"},
       # not an optional dependency, because *this package* is itself a dev dependency
       {:igniter, "~> 0.6 and >= 0.6.6"},
+      # optional rather than only: :dev so consumers inherit the version
+      # constraint and Mix compiles ex_doc before the validator's compile-time branch
+      {:ex_doc, "~> 0.40", optional: true, runtime: false},
       # dev dependencies
-      {:ex_doc, "~> 0.37-rc", only: [:dev, :test], runtime: false},
       {:ex_check, "~> 0.12", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 0.0.0", only: [:dev, :test], runtime: false},
