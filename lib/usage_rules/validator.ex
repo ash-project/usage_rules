@@ -75,7 +75,7 @@ defmodule UsageRules.Validator do
 
         defp deps do
           [
-            {:ex_doc, "~> 0.37", only: [:dev, :test], runtime: false}
+            {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false}
           ]
         end
 
@@ -100,8 +100,11 @@ defmodule UsageRules.Validator do
 
   # Everything that touches ex_doc modules is compiled only when ex_doc is
   # available, so projects that use usage_rules as a dev dependency without
-  # ex_doc compiled still compile this module cleanly. Calling validate/1
-  # there fails fast with the actionable error from ensure_ex_doc!/1.
+  # ex_doc still compile this module cleanly; calling validate/1 there fails
+  # fast with the actionable error from ensure_ex_doc!/1. Declaring ex_doc as
+  # an optional dependency in mix.exs makes Mix compile ex_doc before this
+  # module and recompile this module when ex_doc is added, so this branch
+  # always matches whether ex_doc is actually present.
   if Code.ensure_loaded?(ExDoc) do
     # The flag `ExDoc.warn/2` sets whenever it emits a warning. ex_doc's own
     # CLI uses it (via `ExDoc.generate_docs/4`'s `warned?` result) to decide
