@@ -12,6 +12,17 @@ See [Conventional Commits](Https://conventionalcommits.org) for commit guideline
 
 <!-- changelog -->
 
+## v1.3.1 (2026-10-30)
+
+
+
+
+### Bug Fixes:
+
+* don't document hidden mix tasks in usage rules by Zach Daniel
+
+* declare ex_doc as an optional dependency of the validator (#91) by leonqadirie
+
 ## v1.3.0 (2026-10-25)
 
 
