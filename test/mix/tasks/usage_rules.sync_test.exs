@@ -838,6 +838,28 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
       assert :binary.match(content, "### foo") < :binary.match(content, "### bar")
     end
 
+    test "lists only visible mix tasks, omitting hidden modules" do
+      igniter =
+        project_with_deps(%{
+          "deps/usage_rules/usage-rules.md" => "# Usage Rules"
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: [
+              "use-usage-rules": [usage_rules: [:usage_rules]]
+            ]
+          ]
+        )
+
+      content = file_content(igniter, ".claude/skills/use-usage-rules/SKILL.md")
+      assert content =~ "## Available Mix Tasks"
+      assert content =~ "`mix usage_rules.sync`"
+      assert content =~ "`mix usage_rules.install`"
+      refute content =~ "usage_rules.sync.docs"
+      refute content =~ "usage_rules.install.docs"
+    end
+
     test "builds skill with custom location" do
       project_with_deps(%{
         "deps/foo/usage-rules.md" => "# Foo Usage"

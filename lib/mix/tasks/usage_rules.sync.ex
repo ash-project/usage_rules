@@ -1374,26 +1374,12 @@ if Code.ensure_loaded?(Igniter) do
           []
 
         modules ->
+          # Mirror `mix help`: skip non-task modules (e.g. `Mix.Tasks.Foo.Docs`)
+          # and tasks hidden with `@moduledoc false`.
           modules
-          |> Enum.filter(fn mod ->
-            Atom.to_string(mod) |> String.starts_with?("Elixir.Mix.Tasks.")
-          end)
-          |> Enum.map(fn mod ->
-            Code.ensure_loaded(mod)
-            {Mix.Task.task_name(mod), module_shortdoc(mod)}
-          end)
+          |> Enum.filter(&(Mix.Task.task?(&1) and Mix.Task.moduledoc(&1) != false))
+          |> Enum.map(&{Mix.Task.task_name(&1), Mix.Task.shortdoc(&1)})
           |> Enum.sort_by(&elem(&1, 0))
-      end
-    end
-
-    defp module_shortdoc(mod) do
-      if Code.ensure_loaded?(mod) && function_exported?(mod, :__info__, 1) do
-        case Keyword.get(mod.__info__(:attributes), :shortdoc) do
-          [doc] when is_binary(doc) -> doc
-          _ -> nil
-        end
-      else
-        nil
       end
     end
 
