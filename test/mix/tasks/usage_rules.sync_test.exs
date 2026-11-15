@@ -776,6 +776,132 @@ defmodule Mix.Tasks.UsageRules.SyncTest do
     end
   end
 
+  describe "CRLF line endings" do
+    defp crlf(content), do: String.replace(content, "\n", "\r\n")
+
+    defp assert_crlf_only(content) do
+      assert content =~ "\r\n"
+      refute content =~ ~r/(?<!\r)\n/
+    end
+
+    test "replaces usage-rules section and preserves CRLF line endings" do
+      igniter =
+        project_with_deps(%{
+          "AGENTS.md" =>
+            crlf(
+              "# My Project\n\n<!-- usage-rules-start -->\n<!-- old_pkg-start -->\n## old_pkg usage\nOld content\n<!-- old_pkg-end -->\n<!-- usage-rules-end -->\n\n# Other content"
+            ),
+          "deps/foo/usage-rules.md" => "# Foo Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [:foo])
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Rules"
+      refute content =~ "old_pkg"
+      assert content =~ "# My Project"
+      assert content =~ "Other content"
+      assert_crlf_only(content)
+    end
+
+    test "start marker without end marker" do
+      igniter =
+        project_with_deps(%{
+          "AGENTS.md" =>
+            crlf("# My Project\n\n<!-- usage-rules-start -->\nOld inlined content\n"),
+          "deps/foo/usage-rules.md" => "# Foo Rules"
+        })
+        |> sync(file: "AGENTS.md", usage_rules: [:foo])
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Foo Rules"
+      assert content =~ "<!-- usage-rules-end -->"
+      refute content =~ "Old inlined content"
+      assert_crlf_only(content)
+    end
+
+    test "cleans up usage-rules section when switching to skills only" do
+      igniter =
+        project_with_deps(%{
+          "AGENTS.md" =>
+            crlf(
+              "# My Project\n\nCustom notes\n\n<!-- usage-rules-start -->\nOld inline content\n<!-- usage-rules-end -->\n\nFooter"
+            ),
+          "deps/foo/usage-rules.md" => "# Foo Rules"
+        })
+        |> sync(file: "AGENTS.md", skills: [deps: [:foo]])
+
+      content = file_content(igniter, "AGENTS.md")
+      assert content =~ "Custom notes"
+      assert content =~ "Footer"
+      refute content =~ "Old inline content"
+      refute content =~ "usage-rules-start"
+      assert_crlf_only(content)
+    end
+
+    test "preserves custom content in a CRLF skill on re-sync" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage\n\nUpdated content.",
+          ".claude/skills/use-foo/SKILL.md" =>
+            crlf(
+              "---\nname: use-foo\ndescription: \"old\"\nmetadata:\n  managed-by: usage-rules\n---\n\nMy custom instructions\n\n<!-- usage-rules-skill-start -->\nOld body\n<!-- usage-rules-skill-end -->"
+            )
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: ["use-foo": [usage_rules: [:foo]]]
+          ]
+        )
+
+      content = file_content(igniter, ".claude/skills/use-foo/SKILL.md")
+      assert content =~ "My custom instructions"
+      assert content =~ "<!-- usage-rules-skill-start -->"
+      refute content =~ "Old body"
+      assert_crlf_only(content)
+    end
+
+    test "preserves custom content in a stale CRLF skill" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Rules",
+          "skills/use-old/SKILL.md" =>
+            crlf(
+              "---\nname: use-old\nmetadata:\n  managed-by: usage-rules\n---\n\nMy custom notes\n\n<!-- usage-rules-skill-start -->\nOld skill.\n<!-- usage-rules-skill-end -->"
+            )
+        })
+        |> sync(
+          skills: [
+            location: "skills",
+            build: ["use-foo": [usage_rules: [:foo]]]
+          ]
+        )
+
+      content = file_content(igniter, "skills/use-old/SKILL.md")
+      assert content =~ "My custom notes"
+      refute content =~ "usage-rules-skill-start"
+      refute content =~ "managed-by: usage-rules"
+      assert_crlf_only(content)
+    end
+
+    test "does not rewrite CRLF reference files whose content is unchanged" do
+      igniter =
+        project_with_deps(%{
+          "deps/foo/usage-rules.md" => "# Foo Usage\n\nSome content.",
+          ".claude/skills/use-foo/references/foo/foo.md" => crlf("# Foo Usage\n\nSome content.\n")
+        })
+        |> sync(
+          skills: [
+            location: ".claude/skills",
+            build: ["use-foo": [usage_rules: [:foo]]]
+          ]
+        )
+
+      assert file_content(igniter, ".claude/skills/use-foo/references/foo/foo.md") ==
+               crlf("# Foo Usage\n\nSome content.\n")
+    end
+  end
+
   describe "skills.build" do
     test "builds a skill from a single package's usage rules" do
       igniter =

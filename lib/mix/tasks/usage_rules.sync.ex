@@ -660,22 +660,22 @@ if Code.ensure_loaded?(Igniter) do
 
     defp cleanup_stale_usage_rules_section(igniter, file) do
       Igniter.update_file(igniter, file, fn source ->
-        content = Rewrite.Source.get(source, :content)
+        update_preserving_line_endings(source, fn content ->
+          cond do
+            String.contains?(content, "<!-- usage-rules-start -->") &&
+                String.contains?(content, "<!-- usage-rules-end -->") ->
+              [prelude, rest] = String.split(content, "<!-- usage-rules-start -->\n", parts: 2)
+              [_old, postlude] = String.split(rest, "\n<!-- usage-rules-end -->", parts: 2)
+              String.trim_trailing(prelude <> postlude)
 
-        cond do
-          String.contains?(content, "<!-- usage-rules-start -->") &&
-              String.contains?(content, "<!-- usage-rules-end -->") ->
-            [prelude, rest] = String.split(content, "<!-- usage-rules-start -->\n", parts: 2)
-            [_old, postlude] = String.split(rest, "\n<!-- usage-rules-end -->", parts: 2)
-            Rewrite.Source.update(source, :content, String.trim_trailing(prelude <> postlude))
+            String.contains?(content, "<!-- usage-rules-start -->") ->
+              [prelude, _old] = String.split(content, "<!-- usage-rules-start -->\n", parts: 2)
+              String.trim_trailing(prelude)
 
-          String.contains?(content, "<!-- usage-rules-start -->") ->
-            [prelude, _old] = String.split(content, "<!-- usage-rules-start -->\n", parts: 2)
-            Rewrite.Source.update(source, :content, String.trim_trailing(prelude))
-
-          true ->
-            source
-        end
+            true ->
+              content
+          end
+        end)
       end)
     end
 
@@ -693,9 +693,10 @@ if Code.ensure_loaded?(Igniter) do
         file,
         full_contents,
         fn source ->
-          current = Rewrite.Source.get(source, :content)
-          new_content = replace_usage_rules_section(current, package_contents)
-          Rewrite.Source.update(source, :content, new_content)
+          update_preserving_line_endings(
+            source,
+            &replace_usage_rules_section(&1, package_contents)
+          )
         end
       )
     end
@@ -778,6 +779,7 @@ if Code.ensure_loaded?(Igniter) do
           case Rewrite.source(acc.rewrite, skill_path) do
             {:ok, source} ->
               Rewrite.Source.get(source, :content)
+              |> to_lf()
               |> extract_skill_custom_content()
 
             {:error, _} ->
@@ -788,9 +790,7 @@ if Code.ensure_loaded?(Igniter) do
           # Preserve custom content, remove managed section and references
           acc =
             Igniter.update_file(acc, skill_path, fn source ->
-              content = Rewrite.Source.get(source, :content)
-              stripped = strip_managed_skill_content(content)
-              Rewrite.Source.update(source, :content, stripped)
+              update_preserving_line_endings(source, &strip_managed_skill_content/1)
             end)
 
           # Remove reference files but keep SKILL.md
@@ -956,9 +956,7 @@ if Code.ensure_loaded?(Igniter) do
           Path.join(skill_dir, "SKILL.md"),
           skill_md,
           fn source ->
-            current = Rewrite.Source.get(source, :content)
-            new_content = update_skill_content(current, skill_md)
-            Rewrite.Source.update(source, :content, new_content)
+            update_preserving_line_endings(source, &update_skill_content(&1, skill_md))
           end
         )
 
@@ -1192,9 +1190,10 @@ if Code.ensure_loaded?(Igniter) do
               dst_skill_path,
               managed_content,
               fn source ->
-                current = Rewrite.Source.get(source, :content)
-                new_content = update_skill_content(current, managed_content)
-                Rewrite.Source.update(source, :content, new_content)
+                update_preserving_line_endings(
+                  source,
+                  &update_skill_content(&1, managed_content)
+                )
               end
             )
 
@@ -1626,12 +1625,32 @@ if Code.ensure_loaded?(Igniter) do
     defp update_source_content(source, new_content) do
       current = Rewrite.Source.get(source, :content)
 
-      if String.trim_trailing(current) == String.trim_trailing(new_content) do
+      if String.trim_trailing(to_lf(current)) == String.trim_trailing(to_lf(new_content)) do
         source
       else
         Rewrite.Source.update(source, :content, new_content)
       end
     end
+
+    # Marker handling assumes LF line endings. Files checked out with CRLF
+    # (e.g. Windows with core.autocrlf=true) are normalized to LF before `fun`
+    # runs, and the result is converted back so the file keeps its line endings.
+    defp update_preserving_line_endings(source, fun) do
+      current = Rewrite.Source.get(source, :content)
+
+      new_content =
+        if String.contains?(current, "\r\n") do
+          current |> to_lf() |> fun.() |> to_crlf()
+        else
+          fun.(current)
+        end
+
+      Rewrite.Source.update(source, :content, new_content)
+    end
+
+    defp to_lf(content), do: String.replace(content, "\r\n", "\n")
+
+    defp to_crlf(content), do: String.replace(content, ~r/\r?\n/, "\r\n")
 
     # Normalizes a skill name to comply with the agentskills.io specification:
     # https://agentskills.io/specification#name-field
