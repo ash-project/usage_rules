@@ -94,6 +94,16 @@ mix usage_rules.sync
 
 That's it. The config is the source of truth — packages in the file but not in config are automatically removed on each sync.
 
+### Checking in CI
+
+`mix usage_rules.sync` is an Igniter task, so it accepts Igniter's global flags, such as `--check`. With `--check`, it writes nothing and exits nonzero when a sync would change any file, e.g. after a dependency update changed its usage rules:
+
+```sh
+mix usage_rules.sync --check
+```
+
+Content outside the managed sections is not checked.
+
 ## Configuration Reference
 
 ```elixir
@@ -437,7 +447,7 @@ Make sure your `usage-rules/skills/` directory is included in your hex package's
 mix usage_rules.validate usage-rules.md usage-rules/*.md
 ```
 
-Run with no arguments, it validates the files `mix usage_rules.sync` manages in the current project instead: the composed file from the `:file` config option, and `*.md` files under skills whose `SKILL.md` contains `managed-by: usage-rules`.
+Run with no arguments, it validates the files `mix usage_rules.sync` manages in the current project instead: the composed file from the `:file` config option, and `*.md` files under skills whose `SKILL.md` contains `managed-by: usage-rules`. This checks references only; to check that those files are up to date, see [Checking in CI](#checking-in-ci).
 
 The check is deliberately conservative: the warnings are exactly what a docs build emits, so `ex_doc` skips fenced code blocks, and stays silent about plain code span mentions that never resolve — such as `mix task` names and bare undefined module names — just like it does inside moduledocs.
 

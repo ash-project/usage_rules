@@ -39,6 +39,15 @@ defmodule Mix.Tasks.UsageRules.Sync.Docs do
 
     The config is the source of truth — packages present in the file but absent
     from config are automatically removed on each sync.
+
+    ## Checking in CI
+
+    Igniter's global flags apply. With `--check`, the task writes nothing and
+    exits nonzero when a sync would change any file:
+
+    ```sh
+    mix usage_rules.sync --check
+    ```
     """
   end
 
